@@ -1,0 +1,9 @@
+gallery_dl==1.32.17
+pyaes==1.6.1
+pyasn1==0.6.4
+rsa==4.9.1
+Telethon==1.45.0
+TgCrypto==1.2.5
+yt-dlp-ejs==0.8.0
+yt-dlp==2026.8.19
+ytmusicapi==1.12.3

@@ -1,0 +1,32 @@
+# Secrets and personal data: NEVER commit these
+config.sh
+device.json
+backup/
+downloads/
+.push/
+token
+api.txt
+cookies.txt
+owners
+users.json
+subs.json
+cache.json
+stats.json
+camaras.json
+voicemonkey.json
+lastfm.json
+scrobble_state.json
+stt.json
+ytmusic_cookies.txt
+*.session
+*.session-journal
+*.tgz
+*.tar.gz
+*.tar.xz
+.env
+
+# Misc
+__pycache__/
+*.pyc
+*.log
+.claude/

@@ -1,0 +1,48 @@
+# server.conf -- settings for the phone-side scripts (enter.sh, bot.sh, charge.sh, start.sh).
+# Installed on the phone as /data/debian/server.conf. It is plain shell: `KEY=value`.
+# charge.sh re-reads it every minute, so you can edit it live (no restart needed).
+# Anything you leave out falls back to the default shown here.
+
+# ---- Battery ------------------------------------------------------------------
+# A phone that lives plugged in for years kills its battery (and can swell) if it is
+# kept at 100 %. charge.sh keeps it between LOW and HIGH by switching the charger.
+#   BATT_CTRL=slate   Samsung "sec-battery" driver:  batt_slate_mode  (1 = stop charging)
+#   BATT_CTRL=enable  Qualcomm/Moto style:           charging_enabled (0 = stop charging)
+#   BATT_CTRL=none    no control available; the phone charges normally (see docs/*/06-*)
+# For other drivers see docs: look for input_suspend, charge_control_limit, ACC (Magisk)...
+BATT=/sys/class/power_supply/battery
+BATT_CTRL=slate
+#BATT_CTRL_FILE=$BATT/batt_slate_mode      # override the control file if yours differs
+LOW=40            # resume charging at or below this %
+HIGH=60           # pause charging at or above this %
+MAXTEMP=420       # tenths of a degree: 420 = 42.0 C, pause charging above it
+FLOOR=15          # below this % always charge (never let the phone die)
+
+# ---- Network ------------------------------------------------------------------
+WIFI_IFACE=wlan0
+# If the Wi-Fi signal stays below this (dBm) for 5 min, reconnect to look for a better
+# access point. Use a lower value (e.g. -85) if your only usable signal is weak.
+WIFI_MIN=-75
+# Android 11+: processes running as root (the bot) may get "Network is unreachable",
+# because Android no longer consults the main routing table. 1 = keep an
+# `ip rule ... lookup <wlan table>` in place. Needed on LineageOS 18.1 (Moto X2).
+FIX_ROUTE=0
+
+# ---- adb over Wi-Fi -----------------------------------------------------------
+ADB_TCP_PORT=5555
+ADB_TCP_PROP=service.adb.tcp.port          # Android 11+: persist.adb.tcp.port
+# How to restart adbd. Android 4.4: "stop adbd; sleep 2; start adbd". Newer: the ctl form.
+ADB_RESTART="stop adbd; sleep 2; start adbd"
+#ADB_RESTART="setprop ctl.restart adbd"
+
+# ---- Boot (start.sh) ----------------------------------------------------------
+DOZE_OFF=0        # 1 = `dumpsys deviceidle disable` (Android 6+; stops Doze cutting the network)
+LINEAGE_CHARGE_CTRL_OFF=0   # 1 = switch off LineageOS "charging control" (it cuts the charger on a schedule)
+
+# ---- Bot ----------------------------------------------------------------------
+BOT_CMD="/opt/bot/venv/bin/python3 /opt/bot/bot.py"   # run inside the chroot
+PING_HOST=api.telegram.org                            # bot.sh waits until this answers
+
+# ---- Optional: pin to 5 GHz (phone/extras/wifi-band.sh, LineageOS / Android 12+) ----
+#WIFI_2G_SSID="MyWifi"
+#WIFI_5G_SSID="MyWifi_5G"

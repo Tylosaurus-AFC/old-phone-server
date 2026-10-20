@@ -1,0 +1,57 @@
+# Packages that a headless server usually does not need. Disable ONE BATCH AT A TIME and
+# reboot after each: some phones refuse to boot if a package the framework needs is gone.
+#   adb shell su -c "pm disable-user --user 0 <package>"      (undo: pm enable <package>)
+# On Android 4.4 use `pm disable <package>`. Check the exact names on your phone with
+#   adb shell pm list packages
+#
+# NEVER disable: com.android.permissioncontroller (system_server then crash-loops at boot),
+# com.android.settings, com.android.systemui, the launcher, com.android.phone,
+# com.android.providers.settings, com.android.providers.media, com.android.networkstack*,
+# your keyboard (AOSP: com.android.inputmethod.latin), com.android.shell, and your root
+# manager (Magisk / KingRoot). Google Play Services is safe to disable ONLY if you do not
+# need Google apps on the phone any more.
+#
+# --- Google (GApps)
+com.google.android.gms
+com.google.android.gsf
+com.android.vending
+com.google.android.apps.maps
+com.google.android.youtube
+com.google.android.apps.youtube.music
+com.google.android.googlequicksearchbox
+com.google.android.syncadapters.calendar
+com.google.android.syncadapters.contacts
+# --- LineageOS / AOSP apps
+org.lineageos.aperture
+org.lineageos.audiofx
+org.lineageos.etar
+org.lineageos.glimpse
+org.lineageos.jelly
+org.lineageos.recorder
+org.lineageos.twelve
+org.lineageos.updater
+org.lineageos.profiles
+org.lineageos.backgrounds
+com.android.calculator2
+com.android.contacts
+com.android.deskclock
+com.android.gallery3d
+com.android.messaging
+com.android.dreams.basic
+com.android.dreams.phototable
+com.android.egg
+com.android.bips
+com.android.printspooler
+com.android.printservice.recommendation
+com.android.wallpaper.livepicker
+com.android.bookmarkprovider
+com.android.htmlviewer
+com.android.stk
+com.android.mms.service
+com.android.providers.calendar
+com.android.bluetoothmidiservice
+# --- Samsung (older One UI / TouchWiz; names vary by model)
+com.sec.android.app.sbrowser
+com.samsung.android.app.memo
+com.sec.android.app.camera
+com.sec.android.gallery3d
