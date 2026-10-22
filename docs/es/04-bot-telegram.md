@@ -63,8 +63,10 @@ Basta con mandar un enlace. Comandos:
 | Comando | Quién | Qué hace |
 |---|---|---|
 | *enlace* | todos | descarga y publica; borra el mensaje del enlace |
-| `/mp3 enlace` | todos | solo el audio, MP3 a 192 kbps con portada y etiquetas |
-| `/original enlace` | todos | fotos/vídeos como archivo, sin comprimir |
+| `/mp3 enlace` | todos | solo el audio, MP3 a 192 kbps con portada y etiquetas (o respondiendo a un vídeo del bot) |
+| `/original enlace` | todos | fotos/vídeos como archivo, sin comprimir (o respondiendo a un vídeo del bot) |
+| `/buscar palabras` | todos | busca en YouTube: 5 resultados con botones de vídeo o MP3 |
+| `/cola` | todos | tus descargas en espera o en curso, con botón para cancelar (`/cancelar N`) |
 | `/pdf` | todos | manda un PDF con `/pdf` como pie (o responde a uno): una imagen por página; opciones `archivo`, `png`, `zip`, `10-25` |
 | `/estado` `/velocidad` `/acerca` `/help` | todos | estado, prueba de velocidad, acerca de, ayuda |
 | `/cookies` (+ mandar un `.txt`) | dueño | estado/renovación de cookies de Instagram y Facebook |
@@ -74,7 +76,9 @@ Basta con mandar un enlace. Comandos:
 | `/permitir` `/quitar` `/usuarios` | dueño | quién puede usarlo por privado |
 | `/salud` `/historial [N]` `/bateria` | dueño | comprobaciones, registro de eventos, detalle de batería y cortes de luz |
 | `/reiniciar confirmar` · `adb` · `wifi` | dueño | reiniciar el móvil · solo adb · reconectar el Wi-Fi |
-| `/transcribir on\|off\|modelo X` | dueño | transcripción de notas de voz en este chat |
+| `/transcribir on\|off\|modelo X` | dueño | transcripción de notas de voz en este chat (`modelo auto`: ver abajo) |
+| `/stats [hoy\|semana\|mes\|todo]` | dueño | descargas, fallos, datos y notas de voz por periodo (necesita `"sqlite": true`) |
+| `/guardar` (respondiendo, o `/guardar enlace`) | dueño | copia un vídeo al disco USB, donde no se borra (solo con `archivo_dias`) |
 
 ### Instagram / Facebook / YouTube con restricción de edad necesitan cookies
 
@@ -102,7 +106,24 @@ tools/install.sh voice        # compila whisper.cpp (10+ min en un móvil de 2 n
 Pon el idioma en `/opt/bot/stt.json` como `{"lang": "es"}` (por defecto `es`) y usa un modelo de Vosk
 del mismo idioma (mira el encabezado de `phone/extras/setup-voice.sh`). Las notas de voz de los chats
 autorizados se transcriben en el móvil: primero un borrador rápido de Vosk y luego el texto mejor de
-Whisper lo sustituye.
+Whisper lo sustituye. Con `/transcribir modelo auto` (y bajados `large-v3-turbo-q5_0` y `small-q5_1`) las
+notas de hasta 2 min usan turbo y las más largas el modelo small, más rápido, para que una nota larga no
+tenga el procesador ocupado mucho rato en un móvil de gama media.
+
+### Botones, estadísticas y archivo de 7 días
+
+* `/help` muestra botones rápidos al dueño, y cada vídeo lleva botones debajo (**MP3**, **Original** y, con
+  disco USB, **NAS**). Mientras trabaja, el bot muestra «escribiendo…» / «enviando vídeo…».
+* Ajustes de `/opt/bot/device.json` (mira `phone/device.example.json`):
+  * `"sqlite": true` — la caché de enlaces enviados y el índice del archivo van en `/opt/bot/bot.db` (SQLite,
+    viene con Python) en vez de en JSON; el `cache.json` anterior se importa una vez al arrancar. Ahí se
+    registra cada descarga y nota de voz, que es lo que lee `/stats`. Sin el ajuste el bot sigue con los
+    JSON y `/stats` no tiene nada que mostrar.
+  * `"archivo_dias": 7` — guarda lo enviado en el móvil 7 días, para que los botones y `/guardar` funcionen
+    sin volver a descargar; se limpia cada hora. No lo actives en un móvil con poco espacio.
+  * `"nas": "/mnt/disk/Guardado"` — adónde copia `/guardar`. El disco debe tener un archivo `.nas` en su raíz
+    (el `charge.sh` sin root lo crea); sin él no se escribe nada, así un disco desconectado nunca llena el
+    almacenamiento del propio móvil.
 
 ## 6. Dónde mirar cuando algo falla
 

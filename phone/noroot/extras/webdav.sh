@@ -7,4 +7,4 @@
 V=/storage/$(~/server/sa.sh "sm list-volumes public 2>&1 | cat" | awk '$2 == "mounted" {print $3; exit}')
 [ "$V" != /storage/ ] || { echo "no external disk"; exit 1; }
 [ -s ~/.config/server/webdav.pass ] || { echo "create ~/.config/server/webdav.pass first"; exit 1; }
-exec rclone serve webdav "$V" --addr :8080 --user "${WEBDAV_USER:-webdav}" --pass "$(cat ~/.config/server/webdav.pass)"
+exec rclone serve webdav "$V" --exclude "Backups/**" --addr :8080 --user "${WEBDAV_USER:-webdav}" --pass "$(cat ~/.config/server/webdav.pass)"

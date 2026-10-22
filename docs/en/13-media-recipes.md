@@ -9,6 +9,7 @@ no-root `charge.sh` through two settings in `~/server/server.conf`:
 ```sh
 SERVICES="webdav dlna jellyfin"      # started when a USB disk is mounted, relaunched if they die
 NIGHTLY="youtube-mirror.sh 3"        # once a day at 04:00
+WEEKLY_BACKUP=1                      # Sundays 04:00: extras/backup.sh
 ```
 
 `touch ~/server/no-<name>` switches one off without editing anything (`no-nightly` for the job).
@@ -22,7 +23,9 @@ supervision for these in root mode.
 
 * A phone with USB-OTG and a powered hub (or a self-powered disk). Android mounts it as
   *public* storage; Termux sees it at `/storage/<UUID>` and `enter.sh` mounts it inside Debian at
-  **`/mnt/disk`** (`charge.sh` finds the UUID with `sm list-volumes public`).
+  **`/mnt/disk`** (`charge.sh` finds the UUID with `sm list-volumes public`). `charge.sh` also leaves a
+  `.nas` file in the disk's root: the mirror, the backup and the bot's `/guardar` only write when it is
+  there, so with the disk unplugged they never fill the phone's own storage. Do not delete it.
 * **Format it exFAT**, not NTFS: Android mounts exFAT with the kernel driver (NTFS goes through
   `ntfs-3g`/FUSE) and Windows, macOS, TVs and most devices read it. From the shell user
   (`~/server/sa.sh "sm list-disks; sm partition disk:<id> public"` — **this erases the disk**).
@@ -61,6 +64,12 @@ Jellyfin 12.2 on arm64.
   `/mnt/disk`.
 * Transcoding 1080p → 720p ran at 1.2× real time: one stream at a time. Prefer direct play (H.264, which
   the mirror below produces).
+
+## Weekly backup
+
+`WEEKLY_BACKUP=1` runs `extras/backup.sh` on Sundays at 04:00 (or run it by hand): the bot's settings and
+secrets (token, cookies, owners, followed channels, `bot.db`…) to `/mnt/disk/Backups/bot-YYYYMMDD.tgz`,
+keeping the last 8. It holds the token, so the WebDAV and DLNA recipes do **not** serve `Backups/`.
 
 ## YouTube mirror
 

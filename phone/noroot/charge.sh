@@ -87,8 +87,12 @@ while true; do
       [ -f $D/no-$n ] && continue
       [ -x $D/extras/$n.sh ] || continue
       P=$(cat $D/svc/$n.pid 2>/dev/null)
+      # Logs over 1 MB keep their last 200 KB (in place: a running service keeps writing)
+      if [ "$(stat -c %s $D/svc/$n.log 2>/dev/null || echo 0)" -gt 1000000 ]; then
+        tail -c 200000 $D/svc/$n.log > $D/svc/$n.log.tmp && cat $D/svc/$n.log.tmp > $D/svc/$n.log
+        rm -f $D/svc/$n.log.tmp
+      fi
       if [ -z "$P" ] || ! kill -0 $P 2>/dev/null; then
-        [ "$(stat -c %s $D/svc/$n.log 2>/dev/null || echo 0)" -gt 1000000 ] && tail -c 200000 $D/svc/$n.log > $D/svc/$n.log.tmp && mv $D/svc/$n.log.tmp $D/svc/$n.log
         echo "$(date) starting $n" >> $D/svc/$n.log
         setsid nohup $D/extras/$n.sh >> $D/svc/$n.log 2>&1 </dev/null &
         echo $! > $D/svc/$n.pid
@@ -98,6 +102,15 @@ while true; do
       date +%F > $D/nightly.day
       ev aviso "trabajo nocturno: $NIGHTLY"
       setsid nohup sh -c "$D/extras/$NIGHTLY" >> $D/svc/nightly.log 2>&1 </dev/null &
+    fi
+    # Weekly backup of the bot to the disk (WEEKLY_BACKUP=1): Sundays at 04:00
+    if [ "$WEEKLY_BACKUP" = 1 ] && [ "$(date +%u%H)" = 704 ] && [ "$(cat $D/backup.day 2>/dev/null)" != "$(date +%F)" ]; then
+      date +%F > $D/backup.day
+      if $D/extras/backup.sh >> $D/svc/backup.log 2>&1; then
+        ev respaldo "respaldo semanal del bot en el disco"
+      else
+        ev aviso "falló el respaldo semanal en el disco (ver ~/server/svc/backup.log)"
+      fi
     fi
   fi
 
@@ -116,7 +129,15 @@ while true; do
     v=$(val voltage_now); [ "${v:-0}" -lt 100000 ] && v=$((${v:-0} * 1000))
     put battery/voltage_now "$v"                 # some phones give mV; the bot expects µV
     put uptime "$(val uptime)"; put loadavg "$(val loadavg)"
-    put disk "$(val vol)"                        # USB disk mounted (enter.sh binds it)
+    # USB disk mounted (enter.sh binds it). Only when the query worked: if Shizuku did not
+    # answer, keep the previous value (otherwise the bot would start without its disk).
+    # The .nas marker on the disk root lets the bot tell the real disk from an empty folder.
+    if echo "$OUT" | grep -q "^vol="; then
+      put disk "$(val vol)"
+      v=$(val vol)
+      [ -n "$v" ] && [ -d /storage/$v ] && [ ! -f /storage/$v/.nas ] && \
+        echo "Disk of the phone server (marker for the bot: do not delete)" > /storage/$v/.nas
+    fi
     LIMIT=$CHARGE_LIMIT_DEFAULT
     if [ "$OEM" = oplus ]; then
       set -- $(val limit); LIMIT=$1; [ "$2" = 1 ] || LIMIT=100

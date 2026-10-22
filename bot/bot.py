@@ -30,6 +30,7 @@ from pathlib import Path
 import requests
 
 import bigupload
+import db
 import health
 import pending
 import stt
@@ -170,9 +171,18 @@ def tg(method, _timeout=60, files=None, **params):
         raise TelegramError(method, data.get("description"), code, wait)
 
 
-def say(chat, text, reply_to=None, parse_mode=None):
+def keyboard(buttons):
+    """[[("texto", "/orden"), ...], ...] -> teclado en linea. Cada boton manda la orden
+    como si se escribiera (pasa por los mismos permisos): ver on_button."""
+    return json.dumps({"inline_keyboard": [[{"text": t, "callback_data": d} for t, d in row]
+                                           for row in buttons]})
+
+
+def say(chat, text, reply_to=None, parse_mode=None, buttons=None):
     try:
         params = {"chat_id": chat, "text": text, "disable_web_page_preview": "true"}
+        if buttons:
+            params["reply_markup"] = keyboard(buttons)
         if reply_to:
             params["reply_to_message_id"] = reply_to
             params["allow_sending_without_reply"] = "true"
@@ -223,6 +233,8 @@ def mime(path: Path):
 
 def file_id_of(msg):
     """(tipo, file_id) del medio de un mensaje enviado por la Bot API."""
+    if getattr(_tl, "sent_msgs", None) is not None:    # para el archivo (ver archive_put)
+        _tl.sent_msgs.append([msg["chat"]["id"], msg["message_id"]])
     if msg.get("photo"):
         return "photo", msg["photo"][-1]["file_id"]
     for k in ("video", "animation", "audio", "document"):
@@ -318,6 +330,48 @@ def size_limit():
     return bigupload.MAX_BYTES if bigupload.available() else MAX_BYTES
 
 
+class ChatAction:
+    """Lo que Telegram muestra bajo el nombre del bot mientras se trabaja: «escribiendo…»,
+    «enviando vídeo…». Cada aviso dura ~5 s: se repite cada 4 s hasta stop()."""
+
+    def __init__(self, chat, action="typing"):
+        self.chat, self.action, self._stop = chat, action, threading.Event()
+
+    def start(self):
+        threading.Thread(target=self._loop, daemon=True).start()
+        return self
+
+    def _loop(self):
+        while not self._stop.is_set():
+            try:
+                tg("sendChatAction", _timeout=10, chat_id=self.chat, action=self.action)
+            except Exception:
+                pass
+            self._stop.wait(4)
+
+    def stop(self):
+        self._stop.set()
+
+
+def acting(action, fn):
+    """fn(chat, ...) con la accion de chat puesta mientras dura (comandos en hilo)."""
+    def run(chat, *args):
+        act = ChatAction(chat, action).start()
+        try:
+            fn(chat, *args)
+        finally:
+            act.stop()
+    return run
+
+
+def upload_action(files, mode):
+    if mode == "file":
+        return "upload_document"
+    if mode in ("mp3", "song"):
+        return "upload_voice"
+    return "upload_video" if any(kind(f) == "video" for f in files) else "upload_photo"
+
+
 def publish(chat, files, caption, status=None, extra=None, reply_to=None, as_doc=False,
             status_chat=None):
     """Envia los archivos y devuelve lo enviado para la cache:
@@ -345,6 +399,8 @@ def publish(chat, files, caption, status=None, extra=None, reply_to=None, as_doc
                                                      f"📤 Subiendo {mb:.0f} MB… {p}%"),
                              reply_to=reply_to if first else None, as_doc=as_doc)
         sent.append(("copy", chat, mid))
+        if getattr(_tl, "sent_msgs", None) is not None:
+            _tl.sent_msgs.append([chat, mid])
     return [s for s in sent if s]
 
 
@@ -359,15 +415,39 @@ def send_cached(chat, items, caption, reply_to=None):
                 if i == 0 and n == 0:
                     item.update(caption=caption, parse_mode="HTML")
                 media.append(item)
-            tg("sendMediaGroup", chat_id=chat, media=json.dumps(media),
-               **reply_args(reply_to if i == 0 else None))
+            res = tg("sendMediaGroup", chat_id=chat, media=json.dumps(media),
+                     **reply_args(reply_to if i == 0 else None))
+            _note_sent(chat, *(m["message_id"] for m in res))
         return
     for n, it in enumerate(items):
         first = {"caption": caption, "parse_mode": "HTML", **reply_args(reply_to)} if n == 0 else {}
         if it[0] == "copy":
-            tg("copyMessage", chat_id=chat, from_chat_id=it[1], message_id=it[2], **first)
+            res = tg("copyMessage", chat_id=chat, from_chat_id=it[1], message_id=it[2], **first)
         else:
-            tg(f"send{it[0].capitalize()}", chat_id=chat, **{it[0]: it[1]}, **first)
+            res = tg(f"send{it[0].capitalize()}", chat_id=chat, **{it[0]: it[1]}, **first)
+        _note_sent(chat, res["message_id"])
+
+
+def _note_sent(chat, *mids):
+    """Apunta los mensajes enviados en este hilo (archivo y botones bajo el video)."""
+    if getattr(_tl, "sent_msgs", None) is not None:
+        _tl.sent_msgs += [[chat, m] for m in mids]
+
+
+def media_buttons(chat, mode):
+    """En un privado, botones bajo lo recien enviado (si fue un solo mensaje: los albumes
+    no admiten botones): MP3, original y, para el dueño con NAS, guardar."""
+    mids = [m for c, m in (getattr(_tl, "sent_msgs", None) or []) if c == chat]
+    if chat < 0 or len(mids) != 1 or mode not in ("video", "file"):
+        return
+    owner, _ = load_owners()
+    row = [("🎵 MP3", "/mp3"), ("📁 Original", "/original")]
+    if chat == owner and ARCH_DAYS:
+        row.append(("💾 NAS", "/guardar"))
+    try:
+        tg("editMessageReplyMarkup", chat_id=chat, message_id=mids[0], reply_markup=keyboard([row]))
+    except Exception as e:
+        log.info("botones bajo el video: %s", e)
 
 
 # ---------------------------------------------------------------- Cache de enlaces
@@ -401,7 +481,33 @@ def cache_key(url, mode):
     return f"{mode}:{host}{u.path.rstrip('/')}" + (f"?{urlencode(sorted(q.items()))}" if q else "")
 
 
+# device.json "sqlite": true -> cache e indice del archivo en bot.db; sin el ajuste
+# siguen los JSON. La primera vez se importan y los JSON quedan como *.importado.
+SQL = bool(DEVICE.get("sqlite"))
+CACHE_MAX_SQL = 50000          # en SQLite no se reescribe todo en cada cambio: cabe mas
+
+
+def migrate_to_sqlite():
+    if not SQL:
+        return
+    for path, fn, what in ((CACHE_FILE, db.import_cache, "caché"),
+                           (ARCH_INDEX, db.import_archivo, "índice del archivo")):
+        if path.exists():
+            try:
+                n = fn(path)
+                log.info("sqlite: importadas %d entradas de %s", n, path.name)
+                health.event("actualizacion", f"{what} pasado a SQLite ({n} entradas)")
+            except Exception:
+                log.exception("importar %s", path.name)
+
+
 def cache_get(key):
+    if SQL:
+        try:
+            return db.cache_get(key)
+        except Exception:
+            log.exception("cache_get")
+            return None
     with cache_lock:
         try:
             return json.loads(CACHE_FILE.read_text()).get(key)
@@ -410,6 +516,12 @@ def cache_get(key):
 
 
 def cache_put(keys, items, title):
+    if SQL:
+        try:
+            db.cache_put(keys, items, title, CACHE_MAX_SQL)
+        except Exception:
+            log.exception("cache_put")
+        return
     with cache_lock:
         try:
             cache = json.loads(CACHE_FILE.read_text())
@@ -423,6 +535,12 @@ def cache_put(keys, items, title):
 
 
 def cache_drop(key):
+    if SQL:
+        try:
+            db.cache_drop(key)
+        except Exception:
+            log.exception("cache_drop")
+        return
     with cache_lock:
         try:
             cache = json.loads(CACHE_FILE.read_text())
@@ -437,9 +555,299 @@ def cache_drop(key):
 _tl = threading.local()   # ultimo error de cada hilo, para los avisos
 
 
+# ---------------------------------------------------------------- Archivo local y NAS
+# Lo que el bot descarga y envia se queda unos dias en el movil (device.json
+# "archivo_dias"; en un movil con poco espacio, mejor no activarlo). /guardar lo copia al NAS (el disco
+# USB), donde no se borra. Indice: [{t, chat, msgs: [[chat, message_id]], url, title,
+# dir, files}], para encontrar los archivos al responder a un mensaje del bot.
+ARCH_DAYS = DEVICE.get("archivo_dias", 0)
+ARCH = BASE / "archivo"
+ARCH_INDEX = ARCH / "indice.json"
+NAS = Path(DEVICE.get("nas", "/mnt/disk/Guardado"))
+arch_lock = threading.Lock()
+
+
+def _arch_load():
+    try:
+        return json.loads(ARCH_INDEX.read_text())
+    except (OSError, ValueError):
+        return []
+
+
+def archive_put(files, chat, msgs, url, title, mode="video"):
+    """Mueve los archivos ya enviados al archivo (si esta activado)."""
+    if not ARCH_DAYS or not files:
+        return
+    try:
+        with arch_lock:
+            d = ARCH / time.strftime("%Y%m%d") / f"{abs(chat)}_{int(time.time() * 1000)}"
+            d.mkdir(parents=True, exist_ok=True)
+            names = []
+            for f in files:
+                if f.exists():
+                    shutil.move(str(f), d / f.name)
+                    names.append(f.name)
+            if SQL:
+                db.archivo_put(int(time.time()), chat, msgs, url, title, mode,
+                               str(d.relative_to(ARCH)), names)
+            else:
+                idx = _arch_load()
+                idx.append({"t": int(time.time()), "chat": chat, "msgs": msgs, "url": url,
+                            "title": title, "mode": mode, "dir": str(d.relative_to(ARCH)),
+                            "files": names})
+                ARCH_INDEX.write_text(json.dumps(idx, ensure_ascii=False))
+    except Exception:
+        log.exception("archive_put")
+
+
+def archive_find(chat, msg_id=None, url=None, audio=False):
+    """La entrada mas reciente de ese mensaje del bot (o de ese enlace, del mismo tipo:
+    audio o video) cuyos archivos sigan en el movil."""
+    entries = db.archivo_buscar(chat, msg_id, url) if SQL else reversed(_arch_load())
+    for e in entries:
+        is_audio = e.get("mode") in ("mp3", "song") if e.get("mode") else \
+            all(n.lower().endswith((".mp3", ".m4a", ".opus", ".ogg")) for n in e["files"])
+        same_kind = is_audio == audio
+        if (msg_id and [chat, msg_id] in e["msgs"]) or (url and url == e.get("url") and same_kind):
+            if all((ARCH / e["dir"] / n).exists() for n in e["files"]):
+                return e
+    return None
+
+
+def archive_clean():
+    """Borra lo que tiene mas de ARCH_DAYS dias (se llama cada hora)."""
+    if not ARCH_DAYS:
+        return
+    limit = time.time() - ARCH_DAYS * 86400
+    if SQL:
+        with arch_lock:
+            dirs = db.archivo_viejos(limit)
+            for d in dirs:
+                shutil.rmtree(ARCH / d, ignore_errors=True)
+            if dirs:
+                log.info("archivo: %d entrada(s) de más de %d días borradas", len(dirs), ARCH_DAYS)
+            _clean_days(limit)
+        return
+    with arch_lock:
+        idx = _arch_load()
+        keep = [e for e in idx if e["t"] >= limit]
+        for e in idx:
+            if e["t"] < limit:
+                shutil.rmtree(ARCH / e["dir"], ignore_errors=True)
+        if len(keep) != len(idx):
+            ARCH_INDEX.write_text(json.dumps(keep, ensure_ascii=False))
+            log.info("archivo: %d entrada(s) de más de %d días borradas", len(idx) - len(keep),
+                     ARCH_DAYS)
+        _clean_days(limit)
+
+
+def _clean_days(limit):
+    """Carpetas de dias vacias o anteriores al limite (por su nombre AAAAMMDD), aunque no
+    esten en el indice: p. ej. tras restaurar un bot.db de otro equipo."""
+    cut = time.strftime("%Y%m%d", time.localtime(limit))
+    for day in ARCH.glob("2*"):
+        if day.is_dir() and (day.name < cut or not any(day.iterdir())):
+            shutil.rmtree(day, ignore_errors=True)
+
+
+def nas_save(files, title):
+    """Copia los archivos al NAS como «AAAA-MM-DD - titulo.ext». -> lista de nombres."""
+    # La marca .nas esta en la raiz del disco: sin ella, /mnt/disk seria una carpeta vacia
+    # dentro del Debian (disco desconectado) y lo guardado no llegaria al disco
+    if not (NAS.parent / ".nas").exists():
+        raise RuntimeError("no hay disco USB conectado (el NAS está apagado)")
+    NAS.mkdir(parents=True, exist_ok=True)
+    base = re.sub(r'[\\/:*?"<>|\n]+', " ", title or "sin titulo").strip()[:100] or "sin titulo"
+    out = []
+    for n, f in enumerate(files, 1):
+        name = f"{time.strftime('%Y-%m-%d')} - {base}" + (f" ({n})" if len(files) > 1 else "")
+        dest = NAS / f"{name}{f.suffix}"
+        i = 2
+        while dest.exists():
+            dest = NAS / f"{name} [{i}]{f.suffix}"
+            i += 1
+        shutil.copyfile(f, dest)
+        out.append(dest.name)
+    return out
+
+
+def cola_command(chat, uid):
+    """/cola: descargas en curso y en espera, con un boton para cancelar cada una. El
+    dueño ve todas; los demas, las de su chat."""
+    owner, _ = load_owners()
+    mine = [j for j in list(jobs.items.values()) if uid == owner or j["chat"] == chat]
+    mine.sort(key=lambda j: (not j.get("_start"), j.get("_t", 0)))
+    voces = stt_jobs.qsize()
+    if not mine:
+        say(chat, "📭 No hay descargas en cola." + (f"\n🎙️ Notas de voz en cola: {voces}" if voces else ""))
+        return
+    lines, buttons = [], []
+    for i, j in enumerate(mine, 1):
+        if j.get("_cancel"):
+            state = "🚫 cancelando"
+        elif j.get("_start"):
+            state = f"⏳ descargando ({health.ago(time.time() - j['_start'])})"
+        else:
+            state = "🕒 en espera"
+        what = {"mp3": "🎵 ", "file": "📁 ", "song": "🎵 "}.get(j.get("mode"), "")
+        lines.append(f"{i}. {state} · {what}{site_of(j['url'])}: {j['url'][:60]}")
+        if not j.get("_cancel"):
+            buttons.append([(f"❌ Cancelar {i}", f"/cancelar {j['_id']}")])
+    say(chat, "📥 Cola de descargas:\n" + "\n".join(lines)
+              + (f"\n\n🎙️ Notas de voz en cola: {voces}" if voces else ""), buttons=buttons)
+
+
+def cancelar_command(chat, uid, arg):
+    owner, _ = load_owners()
+    j = jobs.items.get(arg.strip())
+    if not j or (uid != owner and j["chat"] != chat):
+        say(chat, "Esa descarga ya no está en la cola.")
+        return
+    j["_cancel"] = True
+    proc = RUNNING.get(j.get("_thread")) if j.get("_start") else None
+    if proc:
+        proc.kill()                       # corta la descarga en marcha (yt-dlp, gallery-dl...)
+    say(chat, f"🚫 Cancelada: {j['url'][:80]}")
+
+
+YT_ID = re.compile(r"[\w-]{11}")
+
+
+def buscar_command(msg, chat, arg):
+    """/buscar texto: los primeros resultados de YouTube, con botones para bajar el video
+    o solo el MP3."""
+    q = arg.strip()
+    if not q:
+        say(chat, "🔎 Uso: /buscar texto (p. ej. /buscar documental ballenas)")
+        return
+    p = run([VENV_BIN / "yt-dlp", "--js-runtimes", "node", "--flat-playlist", "--print",
+             "%(id)s\t%(duration_string)s\t%(title)s", f"ytsearch8:{q}"], "/", timeout=120)
+    rows = [l.split("\t", 2) for l in p.stdout.splitlines() if l.count("\t") >= 2]
+    rows = [r for r in rows if YT_ID.fullmatch(r[0])]
+    if not rows:
+        say(chat, "🔎 No encontré nada.")
+        return
+    text = [f"🔎 <b>{html.escape(q)}</b>"] + [
+        f"{i}. {html.escape(t[:80])} <i>({d if d != 'NA' else 'directo'})</i>"
+        for i, (vid, d, t) in enumerate(rows, 1)]
+    say(chat, "\n".join(text) + "\n\n▶️ el vídeo · 🎵 solo el audio", parse_mode="HTML",
+        buttons=[[(f"{i}. ▶️ {t[:24]}", f"/yt {vid}"), (f"🎵 {i}", f"/ytmp3 {vid}")]
+                 for i, (vid, d, t) in enumerate(rows, 1)])
+
+
+PERIODOS = {"hoy": "hoy", "semana": "últimos 7 días", "mes": "últimos 30 días", "todo": "desde el principio"}
+
+
+def stats_text(arg):
+    """/stats [hoy|semana|mes|todo]: lo que ha hecho el bot (de bot.db)."""
+    p = arg.strip().lower() or "semana"
+    p = p if p in PERIODOS else "semana"
+    now = time.time()
+    since = {"hoy": time.mktime(time.localtime(now)[:3] + (0, 0, 0, 0, 0, -1)),
+             "semana": now - 7 * 86400, "mes": now - 30 * 86400, "todo": 0}[p]
+    q = lambda sql, *a: db.query(sql, (since, *a))
+    first = db.query("SELECT MIN(t) FROM descargas")[0][0]
+    if not first:
+        return "📊 Aún no hay nada registrado (se apunta desde que se activó /stats)."
+    gb = lambda b: f"{(b or 0) / 2**30:.1f} GB" if (b or 0) >= 2**30 else f"{(b or 0) / 2**20:.0f} MB"
+    res = {r: (n, b) for r, n, b in q("SELECT resultado, COUNT(*), SUM(bytes) FROM descargas "
+                                       "WHERE t >= ? GROUP BY resultado")}
+    total = sum(n for n, _ in res.values())
+    get = lambda k: res.get(k, (0, 0))
+    out = [f"📊 <b>Estadísticas</b> · {PERIODOS[p]}",
+           f"⬇️ Enlaces: <b>{total}</b> (✅ {get('ok')[0]} nuevos · ⚡ {get('cache')[0]} de caché"
+           f" · ❌ {get('fallo')[0]} fallos"
+           + (f" · 🚫 {get('cancelado')[0]} cancelados" if get('cancelado')[0] else "")
+           + (f" · 💾 {get('nas')[0]} al NAS" if get('nas')[0] else "") + ")",
+           f"📦 Descargado: {gb(get('ok')[1] + get('nas')[1])}"]
+    avg = q("SELECT AVG(segundos) FROM descargas WHERE t >= ? AND resultado = 'ok'")[0][0]
+    if avg:
+        out.append(f"⏱️ Tiempo medio de una descarga nueva: {avg:.0f} s")
+    redes = q("SELECT red, COUNT(*) FROM descargas WHERE t >= ? AND resultado IN ('ok','cache','nas') "
+              "GROUP BY red ORDER BY 2 DESC LIMIT 8")
+    if redes:
+        out.append("🌐 Por red: " + " · ".join(f"{r} {n}" for r, n in redes))
+    gente = q("SELECT COALESCE(quien, '—'), COUNT(*) FROM descargas WHERE t >= ? AND resultado "
+              "IN ('ok','cache','nas') GROUP BY 1 ORDER BY 2 DESC LIMIT 6")
+    if gente:
+        out.append("👥 Quién: " + " · ".join(f"{html.escape(w)} {n}" for w, n in gente))
+    fallos = q("SELECT red, COUNT(*), error FROM descargas WHERE t >= ? AND resultado = 'fallo' "
+               "GROUP BY red ORDER BY 2 DESC LIMIT 4")
+    if fallos:
+        out.append("❌ Fallos: " + " · ".join(f"{r} {n}" for r, n, _ in fallos))
+        if fallos[0][2]:
+            out.append(f"   <i>último de {fallos[0][0]}: {html.escape(fallos[0][2][:120])}</i>")
+    if p != "hoy":
+        dia = q("SELECT strftime('%d/%m', t, 'unixepoch', 'localtime'), COUNT(*) FROM descargas "
+                "WHERE t >= ? GROUP BY 1 ORDER BY 2 DESC LIMIT 1")
+        if dia:
+            out.append(f"📅 Día con más: {dia[0][0]} ({dia[0][1]} enlaces)")
+    n, aud, ratio = q("SELECT COUNT(*), SUM(audio_seg), AVG(tardo_seg / NULLIF(audio_seg, 0)) "
+                      "FROM voz WHERE t >= ? AND ok = 1")[0]
+    if n:
+        out.append(f"🎙️ Notas de voz: {n} ({aud / 60:.0f} min de audio; transcritas a "
+                   f"{ratio or 0:.1f}× su duración)")
+    out.append(f"\n<i>Registros desde el {time.strftime('%d/%m/%Y', time.localtime(first))}.</i>")
+    return "\n".join(out)
+
+
+def link_of(m):
+    """Primer enlace de un mensaje: el del titulo enlazado (text_link) o uno escrito."""
+    for e in (m.get("caption_entities") or m.get("entities") or []):
+        if e.get("type") == "text_link":
+            return e["url"]
+    urls = URL_RE.findall(m.get("caption") or m.get("text") or "")
+    return urls[0] if urls else None
+
+
+def guardar_command(msg, chat, arg):
+    """/guardar respondiendo a algo que mando el bot (o con un enlace): al NAS."""
+    if not ARCH_DAYS:
+        say(chat, "💾 Este equipo no tiene NAS.", reply_to=msg["message_id"])
+        return
+    r = msg.get("reply_to_message") or {}
+    urls = URL_RE.findall(arg)
+    url = urls[0] if urls else (link_of(r) if r else None)
+    if not r and not url:
+        say(chat, "💾 Responde con /guardar a un vídeo, foto o enlace que te haya mandado, "
+                  "o escribe /guardar <enlace>. Se copia al NAS y ahí no se borra.")
+        return
+    e = archive_find(chat, r.get("message_id"), url, audio=bool(r.get("audio"))) if ARCH_DAYS else None
+    try:
+        if e:
+            names = nas_save([ARCH / e["dir"] / n for n in e["files"]], e.get("title"))
+            say(chat, "💾 Guardado en el NAS:\n" + "\n".join(names), reply_to=msg["message_id"])
+            health.event("nas", f"guardado {e.get('title') or e['files'][0]}"[:150])
+        elif url:
+            # Ya no esta en el movil (o nunca lo estuvo): se baja directo al NAS
+            jobs.put({"chat": chat, "msg_id": msg["message_id"], "url": url,
+                      "mode": "mp3" if r.get("audio") else "video",
+                      "sender": "", "only_link": False, "reply_to": msg["message_id"],
+                      "save_only": True})
+        else:
+            say(chat, "💾 Eso ya no está en el móvil y no tiene enlace del que volver a "
+                      "bajarlo.", reply_to=msg["message_id"])
+    except Exception as ex:
+        say(chat, f"❌ No pude guardarlo: {ex}", reply_to=msg["message_id"])
+
+
+RUNNING = {}   # hilo -> proceso que esta ejecutando (para cortarlo con /cola)
+
+
 def run(cmd, cwd, timeout=900):
     log.info("run: %s", " ".join(map(str, cmd)))
-    p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+    proc = subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True)
+    RUNNING[threading.get_ident()] = proc
+    try:
+        out, err = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        raise
+    finally:
+        RUNNING.pop(threading.get_ident(), None)
+    p = subprocess.CompletedProcess(cmd, proc.returncode, out, err)
     if p.returncode:
         log.info("rc=%s stderr=%s", p.returncode, p.stderr[-800:])
         _tl.last_err = p.stderr.strip().splitlines()[-1][:300] if p.stderr.strip() else ""
@@ -513,9 +921,16 @@ def charge_paused():
 
 
 def monitor_loop():
-    """Vigila temperatura, bateria y disco cada minuto."""
+    """Vigila temperatura, bateria y disco cada minuto (y limpia el archivo cada hora)."""
     bat = "/sys/class/power_supply/battery"
+    n = 0
     while True:
+        if n % 60 == 0:
+            try:
+                archive_clean()
+            except Exception:
+                log.exception("archive_clean")
+        n += 1
         try:
             temp = int(read_sys(f"{bat}/temp", "0")) / 10
             cap = int(read_sys(f"{bat}/capacity", "100"))
@@ -908,15 +1323,21 @@ def handle(job):
     mode = job.get("mode", "video")
     key = cache_key(url, mode)
 
-    # 1) Ya enviado antes: reenviar al instante sin descargar
-    hit = cache_get(key)
+    # 1) Ya enviado antes: reenviar al instante sin descargar (salvo /guardar, que necesita
+    # el archivo para el NAS)
+    hit = None if job.get("save_only") else cache_get(key)
     if hit:
         try:
+            _tl.sent_msgs = []
             for t in targets:
                 send_cached(t, hit["items"],
                             "" if mode == "song" else build_caption(hit["title"], url, job["sender"]),
                             job.get("reply_to") if t == chat else None)
+            if not job.get("quiet") and not job.get("bulk"):
+                media_buttons(chat, mode)
+            _tl.sent_msgs = None
             log.info("cache %s", key)
+            _tl.reg = {"res": "cache"}
             _tl.ok = True
             bump("links")
             if job["only_link"]:
@@ -939,8 +1360,12 @@ def handle(job):
             edit(chat, status, text)
         else:
             say(chat, f"{url}\n{text}")
+    act = ChatAction(chat, "typing")
+    if not quiet and not job.get("bulk"):
+        act.start()                   # «escribiendo…» mientras descarga
     if "_id" in job:
-        jobs.update(job, _status=status)    # para borrarlo si el bot se reinicia a medias
+        jobs.update(job, _status=status,    # para borrarlo si el bot se reinicia a medias
+                    _start=int(time.time()), _thread=threading.get_ident())   # para /cola
     d = JOBS / f"{abs(chat)}_{msg_id}_{job.get('_id') or abs(hash(url)) % 10000}"
     shutil.rmtree(d, ignore_errors=True)
     d.mkdir(parents=True)
@@ -965,6 +1390,8 @@ def handle(job):
                           ("gallery-dl público", lambda u, dd: try_gallerydl(u, dd, False))]
             steps += [("yt-dlp", ytdlp), ("gallery-dl", try_gallerydl), ("directo", try_direct)]
             for name, fn in steps:
+                if job.get("_cancel"):
+                    break
                 try:
                     files = fn(url, d)
                 except Exception as e:
@@ -973,18 +1400,33 @@ def handle(job):
                 if files:
                     log.info("%s -> %d archivo(s)", name, len(files))
                     break
+        if job.get("_cancel"):
+            note("🚫 Cancelado.")
+            _tl.reg = {"res": "cancelado"}
+            return
         if not files:
             record_failure(url)
             note("❌ No he podido sacar nada de ese enlace.\n"
                  "Puede ser privado, necesitar sesión o no estar soportado.")
             return
+        title = meta_title(d) or page_title(url)
+        if job.get("save_only"):               # /guardar de algo que ya no estaba en el movil
+            names = nas_save(files, title)     # al NAS va todo: sin el limite de Telegram
+            delete(chat, status)
+            say(chat, "💾 Guardado en el NAS:\n" + "\n".join(names), reply_to=msg_id)
+            health.event("nas", f"guardado {title or url}"[:150])
+            _tl.reg = {"res": "nas", "bytes": sum(f.stat().st_size for f in files)}
+            _tl.ok = True
+            return
         limit = size_limit()
         ok = [f for f in files if f.stat().st_size <= limit][:MAX_FILES]
+        nbytes = sum(f.stat().st_size for f in ok)      # antes de que pasen al archivo
         if not ok:
             note(f"❌ El archivo pasa de {limit // 2**20} MB (límite de Telegram para bots).")
             return
         edit(chat, status, f"📤 Enviando {len(ok)} archivo(s)…")
-        title = meta_title(d) or page_title(url)
+        act.action = upload_action(ok, mode)   # «enviando vídeo…», «enviando foto…»
+        _tl.sent_msgs = []                     # mensajes que se envian: para el archivo
         cap = "" if mode == "song" else build_caption(title, url, job["sender"])
         try:
             sent = publish(targets[0], ok, cap, status, extra,
@@ -1016,7 +1458,11 @@ def handle(job):
                 if canon:
                     keys.add(cache_key(canon, mode))
             cache_put(sorted(keys), sent, title)
+            archive_put(ok, chat, list(_tl.sent_msgs), url, title, mode)
+            if not quiet and not job.get("bulk"):
+                media_buttons(chat, mode)
         log.info("ok %s en %.0fs", url, time.time() - t0)
+        _tl.reg = {"res": "ok", "bytes": nbytes}
         _tl.ok = True
         LAST_OK["download"] = (time.time(), site_of(url))
         bump("links")
@@ -1029,6 +1475,8 @@ def handle(job):
         record_failure(url)
         note(f"❌ Error: {e}")
     finally:
+        act.stop()
+        _tl.sent_msgs = None
         shutil.rmtree(d, ignore_errors=True)
 
 
@@ -1038,10 +1486,25 @@ WORKERS = 3   # peticiones simultaneas; casi todo es esperar a la red, no CPU
 def worker():
     while True:
         job = jobs.get()
+        if job.get("_cancel"):                  # cancelado con /cola antes de empezar
+            jobs.done(job)
+            db.descarga(job["chat"], job.get("uid"), job.get("quien"), site_of(job["url"]),
+                        job["url"], job.get("mode"), "cancelado")
+            continue
+        _tl.reg = {"res": "fallo"}             # handle lo cambia en cada salida
+        t_job = time.time()
         try:
             handle(job)
         finally:
             jobs.done(job)
+            r = _tl.reg
+            db.descarga(job["chat"], job.get("uid"),
+                        job.get("quien") or ("likes" if job.get("bulk") else
+                                             "canal seguido" if job.get("quiet") else None),
+                        site_of(job["url"]), job["url"], job.get("mode"), r["res"],
+                        r.get("bytes", 0), time.time() - t_job,
+                        None if r["res"] in ("ok", "cache", "nas") else
+                        r.get("err") or getattr(_tl, "last_err", ""))
             if job.get("bulk"):
                 for hook in PLUGIN_JOB_DONE:
                     try:
@@ -1340,7 +1803,11 @@ def subs_command(chat, cmd, arg):
         pc = post_channel()
         say(chat, "📺 Canales seguidos (👤 privado · 📢 canal"
                   + (f" «{pc['title']}»" if pc else " sin conectar") + "):\n" + "\n".join(lines)
-                  + "\n\n/destino N privado|canal|ambos\n/dejar N – dejar de seguir")
+                  + "\n\n/destino N privado|canal|ambos\n/dejar N – dejar de seguir"
+                  + "\n\nBotones: a dónde van los vídeos de cada canal, o dejar de seguirlo.",
+            buttons=[[(f"{i}. 👤", f"/destino {i} privado"), ("📢", f"/destino {i} canal"),
+                      ("👤+📢", f"/destino {i} ambos"), ("🗑️", f"/dejar {i}")]
+                     for i in range(1, len(subs) + 1)])
     elif cmd == "/destino":
         words = arg.split()
         with subs_lock:
@@ -1531,7 +1998,7 @@ def wifi_link():
                              text=True, timeout=10).stdout
     except (OSError, subprocess.TimeoutExpired):
         out = ""
-    if not out:   # sin root (Realme, proot): lo deja cada minuto charge.sh
+    if not out:   # sin root (proot): lo deja cada minuto charge.sh
         try:
             w = json.loads((BASE / "sys" / "wifi.json").read_text())
             band = ("5 GHz" if w["freq"] > 4000 else "2.4 GHz") if w.get("freq") else None
@@ -1790,6 +2257,7 @@ def stt_worker():
         job = stt_jobs.get()
         chat, msg_id = job["chat"], job["msg_id"]
         status = say(chat, "✍️ Transcribiendo…", reply_to=msg_id)
+        act = ChatAction(chat, "typing").start()      # «escribiendo…» mientras transcribe
         stt_jobs.update(job, _status=status)
         d = JOBS / f"stt_{msg_id}_{abs(chat)}"
         d.mkdir(parents=True, exist_ok=True)
@@ -1804,14 +2272,17 @@ def stt_worker():
                 chat, status, f"🎙️ <b>{who}</b> dijo <i>(borrador, afinando…)</i>:\n"
                               f"{html.escape(draft)}", "HTML"))
             log.info("stt %.0fs de audio en %.0fs (%s)", secs, took, eng)
+            db.voz(chat, job.get("uid"), job.get("name"), secs, took, eng, bool(text))
             if text:
                 edit(chat, status, f"🎙️ <b>{who}</b> dijo:\n{html.escape(text)}", "HTML")
             else:
                 edit(chat, status, f"🎙️ No entendí nada en el audio de {job['name']}.")
         except Exception as e:
             log.exception("stt")
+            db.voz(chat, job.get("uid"), job.get("name"), 0, 0, "error", False)
             edit(chat, status, f"❌ No pude transcribir el audio: {e}")
         finally:
+            act.stop()
             shutil.rmtree(d, ignore_errors=True)
             stt_jobs.done(job)
 
@@ -1846,7 +2317,8 @@ def transcribe_command(chat, arg):
         stt.set_enabled(chat, False)
         say(chat, "🔇 Transcripción de notas de voz desactivada en este chat.")
     elif a[:1] == ["modelo"] and len(a) == 2:
-        if not (stt.STT / f"ggml-{a[1]}.bin").exists():
+        need = stt.AUTO[:2] if a[1] == "auto" else (a[1],)
+        if not all((stt.STT / f"ggml-{m}.bin").exists() for m in need):
             have = sorted(p.stem[5:] for p in stt.STT.glob("ggml-*.bin"))
             say(chat, f"No tengo ese modelo. Disponibles: {', '.join(have) or 'ninguno'}")
             return
@@ -1855,9 +2327,14 @@ def transcribe_command(chat, arg):
         stt.save_config(cfg)
         say(chat, f"✅ Modelo de Whisper: {a[1]}")
     else:
+        models = sorted(p.stem[5:] for p in stt.STT.glob("ggml-*.bin")) \
+            + (["auto"] if all((stt.STT / f"ggml-{m}.bin").exists() for m in stt.AUTO[:2]) else [])
         say(chat, f"🎙️ Transcripción: {'activada' if stt.enabled(chat) else 'desactivada'} "
                   f"en este chat · motor: {stt.engine() or 'ninguno'}\n\n"
-                  "/transcribir on | off · /transcribir modelo base-q5_1 | small-q5_1")
+                  "/transcribir on | off · /transcribir modelo " + " | ".join(models),
+            buttons=[[("🎙️ Activar aquí", "/transcribir on"), ("🔇 Desactivar aquí", "/transcribir off")]]
+            + [[(f"🧠 {m.split('-q')[0]}", f"/transcribir modelo {m}") for m in models[i:i + 3]]
+               for i in range(0, len(models), 3)])
 
 
 # ---------------------------------------------------------------- Salud del servidor
@@ -2094,7 +2571,9 @@ def reboot_command(chat, arg):
         say(chat, "¿Qué quieres reiniciar?\n"
                   "/reiniciar confirmar – el móvil entero (~2 min sin bot)\n"
                   "/reiniciar adb – solo la conexión del PC por Wi-Fi (el bot sigue)\n"
-                  "/reiniciar wifi – reconectar el Wi-Fi (si el PC no lo ve o va lento)")
+                  "/reiniciar wifi – reconectar el Wi-Fi (si el PC no lo ve o va lento)",
+            buttons=[[("📶 Wi-Fi", "/reiniciar wifi"), ("🔌 Conexión del PC", "/reiniciar adb")],
+                     [("🔄 Móvil completo", "/reiniciar confirmar")]])
 
 
 def update_tools(chat=None):
@@ -2196,6 +2675,8 @@ HELP = ("🤖 <b>Qué hago</b>\n"
         "página como imagen JPG. Opciones: <i>archivo</i> (sin comprimir), <i>png</i>, "
         "<i>zip</i> (todo en un archivo), <i>10-25</i> (solo esas páginas)\n"
         "/estado – batería, temperatura, espacio y cola de descargas\n"
+        "/buscar <i>texto</i> – busca en YouTube; con botones bajas el vídeo o solo el audio\n"
+        "/cola – descargas en curso y en espera (con botón para cancelar)\n"
         "/acerca – quién soy, en qué corro y todo lo que sé hacer\n"
         "/velocidad – prueba de velocidad de la red de casa (ping, bajada y subida)\n"
         "/help – esta ayuda")
@@ -2213,7 +2694,12 @@ OWNER_HELP = ("\n\n👑 <b>Solo tú (por privado)</b>\n"
               "/cookies – estado de las sesiones de Instagram/Facebook "
               "(mándame un .txt para renovarlas; /cookies borrar las elimina)\n"
               "/actualizar – actualizar yt-dlp y gallery-dl ahora\n"
+              "/stats [<i>hoy|semana|mes|todo</i>] – enlaces por red y por persona, GB, fallos y "
+              "notas de voz\n"
               "/reiniciar – el móvil (<i>confirmar</i>), solo adb (<i>adb</i>) o el Wi-Fi (<i>wifi</i>)\n"
+              + ("/guardar – respondiendo a un vídeo o foto que te mandé (o con un enlace): lo copia "
+                 f"al NAS, donde no se borra (lo demás se guarda {ARCH_DAYS} días)\n" if ARCH_DAYS else "")
+              +
               "/transcribir – notas de voz a texto en este chat (<i>on</i>/<i>off</i>)\n"
               "/salud – comprobación de todos los servicios, conexión, espacio y último fallo\n"
               "/historial [<i>N</i>] – últimos eventos (reinicios, cortes de Internet, avisos…)\n"
@@ -2225,6 +2711,8 @@ PUBLIC_COMMANDS = [("mp3", "Solo el audio de un enlace"),
                    ("original", "Fotos/vídeos como archivo, calidad original"),
                    ("pdf", "PDF → una imagen por página"),
                    ("estado", "Estado del móvil"),
+                   ("buscar", "Buscar en YouTube y bajarlo"),
+                   ("cola", "Descargas en curso (y cancelarlas)"),
                    ("acerca", "Quién soy y todo lo que hago"),
                    ("velocidad", "Prueba de velocidad de la red"),
                    ("help", "Qué hago y comandos")]
@@ -2234,7 +2722,9 @@ OWNER_COMMANDS = PUBLIC_COMMANDS + [
     ("canal", "Canales de Telegram donde publico"), ("permitir", "Dar acceso a alguien"),
     ("quitar", "Retirar acceso"), ("usuarios", "Quién tiene acceso"),
     ("cookies", "Sesiones de Instagram/Facebook"), ("actualizar", "Actualizar descargadores"),
+    ("stats", "Estadísticas: redes, personas, GB, fallos"),
     ("reiniciar", "Reiniciar el móvil o adb"),
+    *([("guardar", "Guardar en el NAS (respondiendo a un vídeo o con un enlace)")] if ARCH_DAYS else []),
     ("transcribir", "Transcripción de notas de voz"),
     ("salud", "Salud de todos los servicios"), ("historial", "Últimos eventos"),
     ("bateria", "Batería a detalle y cortes de luz")]
@@ -2340,7 +2830,9 @@ def enqueue(msg, chat, user, urls, rest_text, mode="video"):
         or user.get("username", "")
     for n, url in enumerate(urls):
         jobs.put({"chat": chat, "msg_id": msg["message_id"], "url": url, "mode": mode,
-                  "sender": name,
+                  "sender": name, "uid": user.get("id"),
+                  "quien": " ".join(filter(None, [user.get("first_name"), user.get("last_name")]))
+                           or user.get("username", ""),
                   "only_link": only_link and n == len(urls) - 1,
                   # El mensaje se queda (trae texto): la respuesta lo cita
                   "reply_to": None if only_link else msg["message_id"]})
@@ -2348,8 +2840,8 @@ def enqueue(msg, chat, user, urls, rest_text, mode="video"):
 
 OWNER_ONLY = {"/seguir", "/canales", "/dejar", "/destino", "/canal", "/permitir", "/quitar",
               "/usuarios", "/cookies", "/actualizar", "/reiniciar", "/transcribir", "/salud",
-              "/historial", "/bateria", "/batería", "/carga"}
-OWNER_ANYWHERE = {"/actualizar", "/transcribir", "/salud", "/historial",   # tambien en grupos
+              "/historial", "/bateria", "/batería", "/carga", "/guardar", "/stats"}
+OWNER_ANYWHERE = {"/actualizar", "/transcribir", "/salud", "/historial", "/guardar",   # tambien en grupos
                   "/bateria", "/batería", "/carga"}
 
 
@@ -2416,7 +2908,7 @@ def on_message(msg):
                 say(chat, f"🎙️ Ese audio dura más de {STT_MAX_SECS // 60} min; "
                           "no lo transcribo.", reply_to=msg["message_id"])
             else:
-                stt_jobs.put({"chat": chat, "msg_id": msg["message_id"],
+                stt_jobs.put({"chat": chat, "msg_id": msg["message_id"], "uid": uid,
                               "file_id": voice["file_id"],
                               "name": user.get("first_name") or user.get("username", "")})
         return
@@ -2438,19 +2930,31 @@ def on_message(msg):
         return
 
     if cmd in ("/help", "/ayuda"):
-        say(chat, help_text(owner_private), parse_mode="HTML")
+        say(chat, help_text(owner_private), parse_mode="HTML", buttons=[
+            [("📱 Estado", "/estado"), ("🔋 Batería", "/bateria"), ("🌐 Velocidad", "/velocidad")],
+            [("🩺 Salud", "/salud"), ("📊 Estadísticas", "/stats"), ("📥 Cola", "/cola")],
+            [("📺 Canales", "/canales"), ("🎙️ Notas de voz", "/transcribir"), ("🔄 Reiniciar", "/reiniciar")],
+        ] if owner_private else None)
     elif cmd == "/acerca":
         say(chat, about_text(owner_private), parse_mode="HTML")
     elif cmd == "/estado":
         say(chat, status_text())
     elif cmd == "/pdf":
-        threading.Thread(target=pdf_command, args=(msg, chat, arg), daemon=True).start()
+        threading.Thread(target=acting("upload_photo", lambda c, m, a: pdf_command(m, c, a)),
+                         args=(chat, msg, arg), daemon=True).start()
     elif cmd in ("/velocidad", "/speedtest"):
-        threading.Thread(target=speed_command, args=(chat,), daemon=True).start()
+        threading.Thread(target=acting("typing", speed_command), args=(chat,), daemon=True).start()
     elif cmd in ("/mp3", "/original", "/archivo"):
         urls = URL_RE.findall(arg)
+        r = msg.get("reply_to_message")
+        if not urls and r and link_of(r):
+            # Respondiendo a algo que mando el bot (o con su boton): el enlace de su titulo.
+            # Con texto, para que enqueue no borre el mensaje al que se responde.
+            enqueue(msg, chat, user, [link_of(r)], "(respuesta)",
+                    mode="mp3" if cmd == "/mp3" else "file")
+            return
         if not urls:
-            say(chat, f"Uso: {cmd} enlace")
+            say(chat, f"Uso: {cmd} enlace (o respondiendo a un vídeo que te mandé)")
             return
         enqueue(msg, chat, user, urls, arg, mode="mp3" if cmd == "/mp3" else "file")
     elif cmd == "/cookies":
@@ -2479,6 +2983,23 @@ def on_message(msg):
         say(chat, battery_text(arg), parse_mode="HTML")
     elif cmd == "/reiniciar":
         reboot_command(chat, arg.lower())
+    elif cmd == "/guardar":
+        threading.Thread(target=guardar_command, args=(msg, chat, arg), daemon=True).start()
+    elif cmd == "/cola":
+        cola_command(chat, uid)
+    elif cmd == "/stats":
+        say(chat, stats_text(arg), parse_mode="HTML",
+            buttons=[[(t, f"/stats {k}") for k, t in (("hoy", "Hoy"), ("semana", "Semana"),
+                                                       ("mes", "Mes"), ("todo", "Todo"))]])
+    elif cmd == "/cancelar":
+        cancelar_command(chat, uid, arg)
+    elif cmd == "/buscar":
+        threading.Thread(target=acting("typing", lambda c, m, a: buscar_command(m, c, a)),
+                         args=(chat, msg, arg), daemon=True).start()
+    elif cmd in ("/yt", "/ytmp3"):            # los botones de /buscar
+        if YT_ID.fullmatch(arg.strip()):
+            enqueue(msg, chat, user, [f"https://www.youtube.com/watch?v={arg.strip()}"],
+                    "(búsqueda)", mode="mp3" if cmd == "/ytmp3" else "video")
     elif not cmd:
         urls = URL_RE.findall(text)
         if urls:
@@ -2489,6 +3010,7 @@ def on_message(msg):
 
 def main():
     shutil.rmtree(JOBS, ignore_errors=True)   # restos de descargas cortadas
+    migrate_to_sqlite()
     JOBS.mkdir(parents=True, exist_ok=True)
     for _ in range(WORKERS):
         threading.Thread(target=worker, daemon=True).start()
@@ -2522,7 +3044,7 @@ def main():
         try:
             # Durante un corte, peticiones cortas: asi la vuelta se nota al momento
             wait = 1 if outage.since is not None else 50
-            params = {"timeout": wait, "allowed_updates": json.dumps(["message", "my_chat_member"])}
+            params = {"timeout": wait, "allowed_updates": json.dumps(["message", "my_chat_member", "callback_query"])}
             if offset:
                 params["offset"] = offset
             updates = tg("getUpdates", _timeout=wait + 20, **params)
@@ -2539,6 +3061,9 @@ def main():
                         on_message(upd["message"])
                     except Exception:
                         log.exception("on_message")
+                elif "callback_query" in upd:
+                    threading.Thread(target=on_button, args=(upd["callback_query"],),
+                                     daemon=True).start()
                 elif "my_chat_member" in upd:
                     try:
                         channel_event(upd["my_chat_member"])

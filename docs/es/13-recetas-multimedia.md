@@ -8,6 +8,7 @@ arranca y vigila con dos ajustes de `~/server/server.conf`:
 ```sh
 SERVICES="webdav dlna jellyfin"      # se arrancan si hay disco USB montado y se relanzan si caen
 NIGHTLY="youtube-mirror.sh 3"        # una vez al día, a las 4:00
+WEEKLY_BACKUP=1                      # domingos a las 4:00: extras/backup.sh
 ```
 
 `touch ~/server/no-<nombre>` apaga uno sin editar nada (`no-nightly` para el trabajo nocturno). Registros:
@@ -20,7 +21,9 @@ para esto en modo root.
 
 * Un móvil con USB-OTG y un hub con alimentación (o un disco autoalimentado). Android lo monta como almacenamiento
   *público*; Termux lo ve en `/storage/<UUID>` y `enter.sh` lo monta dentro de Debian en **`/mnt/disk`**
-  (`charge.sh` encuentra el UUID con `sm list-volumes public`).
+  (`charge.sh` encuentra el UUID con `sm list-volumes public`). `charge.sh` deja además un archivo `.nas` en la
+  raíz del disco: el espejo, el respaldo y el `/guardar` del bot solo escriben si está, así con el disco
+  desconectado nunca llenan el almacenamiento del propio móvil. No lo borres.
 * **Fórmatealo en exFAT**, no NTFS: Android monta exFAT con el controlador del kernel (NTFS va por
   `ntfs-3g`/FUSE) y lo leen Windows, macOS, TVs y casi todo. Desde el usuario shell
   (`~/server/sa.sh "sm list-disks; sm partition disk:<id> public"` — **esto borra el disco**).
@@ -57,6 +60,12 @@ Debian (su repositorio apt: `jellyfin` + `jellyfin-ffmpeg`); en el Realme fue Je
   apuntando a `/mnt/disk`.
 * Recodificar 1080p → 720p fue a 1,2× tiempo real: un vídeo a la vez. Mejor reproducción directa (H.264, que es lo
   que produce el espejo de abajo).
+
+## Respaldo semanal
+
+`WEEKLY_BACKUP=1` lanza `extras/backup.sh` los domingos a las 4:00 (o a mano): los ajustes y secretos del bot
+(token, cookies, dueños, canales seguidos, `bot.db`…) a `/mnt/disk/Backups/bot-AAAAMMDD.tgz`, conservando los 8
+últimos. Lleva el token, así que las recetas de WebDAV y DLNA **no** sirven `Backups/`.
 
 ## Espejo de YouTube
 

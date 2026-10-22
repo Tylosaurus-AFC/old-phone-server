@@ -5,4 +5,4 @@
 # firewalls block (Windows Firewall also hides it from your PC): test from the TV itself.
 V=/storage/$(~/server/sa.sh "sm list-volumes public 2>&1 | cat" | awk '$2 == "mounted" {print $3; exit}')
 [ "$V" != /storage/ ] || { echo "no external disk"; exit 1; }
-exec rclone serve dlna "$V" --addr :7879 --name "${DLNA_NAME:-Phone server}" --read-only
+exec rclone serve dlna "$V" --exclude "Backups/**" --addr :7879 --name "${DLNA_NAME:-Phone server}" --read-only

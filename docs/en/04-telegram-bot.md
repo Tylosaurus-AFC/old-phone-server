@@ -62,8 +62,10 @@ Just send a link. Commands:
 | Command | Who | What |
 |---|---|---|
 | *link* | all | download and post; the link message is deleted |
-| `/mp3 link` | all | audio only, MP3 192 kbps with cover and tags |
-| `/original link` | all | photos/videos as files, uncompressed |
+| `/mp3 link` | all | audio only, MP3 192 kbps with cover and tags (or reply to a video the bot sent) |
+| `/original link` | all | photos/videos as files, uncompressed (or reply to a video the bot sent) |
+| `/buscar words` | all | search YouTube: 5 results with buttons for video or MP3 |
+| `/cola` | all | your downloads waiting or running, with a cancel button (`/cancelar N`) |
 | `/pdf` | all | send a PDF with `/pdf` as the caption (or reply to one): one image per page; options `archivo`, `png`, `zip`, `10-25` |
 | `/estado` `/velocidad` `/acerca` `/help` | all | status, speed test, about, help |
 | `/cookies` (+ send a `.txt`) | owner | status/renew cookies for Instagram and Facebook |
@@ -73,7 +75,9 @@ Just send a link. Commands:
 | `/permitir` `/quitar` `/usuarios` | owner | who may use it in private |
 | `/salud` `/historial [N]` `/bateria` | owner | health checks, event log, battery detail and power cuts |
 | `/reiniciar confirmar` · `adb` · `wifi` | owner | reboot the phone · restart only adb · reconnect Wi-Fi |
-| `/transcribir on\|off\|modelo X` | owner | voice-note transcription in this chat |
+| `/transcribir on\|off\|modelo X` | owner | voice-note transcription in this chat (`modelo auto`: see below) |
+| `/stats [hoy\|semana\|mes\|todo]` | owner | downloads, failures, data and voice notes per period (needs `"sqlite": true`) |
+| `/guardar` (reply, or `/guardar link`) | owner | copy a video to the USB disk, where it is never deleted (only with `archivo_dias`) |
 
 ### Instagram / Facebook / age-gated YouTube need cookies
 
@@ -101,6 +105,24 @@ tools/install.sh voice        # compiles whisper.cpp (10+ min on a 2-core phone)
 Set the language in `/opt/bot/stt.json` as `{"lang": "en"}` (default `es`) and use a matching Vosk
 model (see the header of `phone/extras/setup-voice.sh`). Voice notes in authorised chats are then
 transcribed on the phone: a fast Vosk draft first, then the better Whisper text replaces it.
+With `/transcribir modelo auto` (and both `large-v3-turbo-q5_0` and `small-q5_1` downloaded) notes up
+to 2 min use turbo and longer ones the faster small model, so a long note does not keep the CPU busy
+for ages on a mid-range phone.
+
+### Buttons, statistics and the 7-day archive
+
+* `/help` shows quick buttons for the owner, and every video carries buttons underneath (**MP3**,
+  **Original** and, with a USB disk, **NAS**). While it works the bot shows "typing…" / "sending video…".
+* `/opt/bot/device.json` switches (see `phone/device.example.json`):
+  * `"sqlite": true` — cache of sent links and the archive index in `/opt/bot/bot.db` (SQLite, comes
+    with Python) instead of JSON files; the old `cache.json` is imported once at start. Every download
+    and voice note is logged there, which `/stats` reads. Without it the bot keeps the JSON files and
+    `/stats` has nothing to show.
+  * `"archivo_dias": 7` — keep what was sent on the phone for 7 days, so the buttons and `/guardar` work
+    without downloading again; cleaned every hour. Leave it out on a phone with little storage.
+  * `"nas": "/mnt/disk/Guardado"` — where `/guardar` copies to. The disk must have a `.nas` file in its
+    root (the no-root `charge.sh` creates it); without it nothing is written, so a disconnected disk
+    never fills the phone's own storage.
 
 ## 6. Where to look when it misbehaves
 

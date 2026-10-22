@@ -84,12 +84,14 @@ tools/noroot-bot.sh enable           # go!
 * **The Telegram bot** (messages in Spanish): downloads from 1000+ sites via yt-dlp/gallery-dl, 1080p, 2 GB
   uploads over MTProto, instant cache, MP3, PDF → images, followed YouTube channels, per-user access
   control, cookie handling, daily auto-update, `/salud` `/historial` `/bateria`, local speech-to-text, followed
-  YouTube channels posted to a private chat and/or a Telegram channel, public-first Instagram/Facebook with clean links.
+  YouTube channels posted to a private chat and/or a Telegram channel, public-first Instagram/Facebook with clean links,
+  inline buttons (MP3 / original / save to disk under every video), `/buscar` YouTube search, `/cola` queue with cancel,
+  `/stats` from an SQLite log, an optional 7-day archive with `/guardar` to the USB disk.
 * **Plugins:** drop-in extras — CCTV snapshots (Dahua), Alexa announcements, YouTube-Music→Last.fm
   scrobbling, YouTube-Music likes → Telegram channel, video stickers — and a simple API for your own.
-* **NAS / media server recipes** for a phone with a USB disk: WebDAV, DLNA, Jellyfin, YouTube mirror.
+* **NAS / media server recipes** for a phone with a USB disk: WebDAV, DLNA, Jellyfin, YouTube mirror, weekly backup.
 * **Operations:** deploy, backup/restore of config and of the whole Debian image, move to another phone.
-* **Tests that need no phone:** `tests/run.sh` (70 checks: battery logic against a fake battery, the no-root
+* **Tests that need no phone:** `tests/run.sh` (72 checks: battery logic against a fake battery, the no-root
   watchdog against a fake Shizuku, back-off and boot sequence, plugin loading, command dispatch, helpers).
 
 ## Guides

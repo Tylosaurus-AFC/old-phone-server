@@ -20,3 +20,6 @@ CHARGE_LIMIT_DEFAULT=80      # shown when the limit cannot be read
 SERVICES=""                  # e.g. "webdav dlna jellyfin"
 # Run once a day at 04:00. Format: "script args", e.g. "youtube-mirror.sh 3"
 NIGHTLY=""
+# Weekly backup of the bot's settings and secrets to <disk>/Backups (Sundays 04:00, keeps 8).
+# The Backups folder is NOT served by the webdav/dlna extras (it holds the bot token).
+WEEKLY_BACKUP=0

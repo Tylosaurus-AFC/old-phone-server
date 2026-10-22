@@ -9,7 +9,7 @@
 # Run it by hand, or from the nightly job: NIGHTLY="youtube-mirror.sh 3" in server.conf.
 N=${1:-5}
 exec $HOME/server/enter.sh "
-[ -d /mnt/disk ] || { echo 'no USB disk mounted'; exit 1; }
+[ -f /mnt/disk/.nas ] || { echo 'no USB disk mounted (missing /mnt/disk/.nas)'; exit 1; }
 C=\"${CHANNELS:-}\"
 [ -n \"\$C\" ] || C=\$(python3 -c 'import json; print(\" \".join(json.load(open(\"/opt/bot/subs.json\"))))')
 D=/mnt/disk/YouTube; mkdir -p \$D

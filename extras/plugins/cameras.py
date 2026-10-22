@@ -1,11 +1,13 @@
 """Plugin opcional: fotos y clips de un grabador de cámaras Dahua (o compatible).
 
 Comandos (solo el dueño): /foto_camaras [cámara] y /clip_camaras cámara [fecha] inicio fin.
+Sin nada detrás, ofrecen botones: elegir cámara (y, para el clip, el tramo hasta ahora).
 Configuración: /opt/bot/camaras.json  {"host": "192.168.1.10", "user": "...", "password": "..."}
 Es un EJEMPLO de plugin: el protocolo es el CGI de Dahua (ver _camaras.py).
 """
 import html
 import json
+import re
 import shutil
 import threading
 import time
@@ -16,12 +18,29 @@ import _camaras as camaras
 def setup(api):
     JOBS, log = api.JOBS, api.log
 
+    def cam_buttons(cmd, all_label):
+        """Un boton por camara (de dos en dos) y otro para todas."""
+        cams = [(f"{n}. {name}", f"{cmd} {n}") for n, name in camaras.channels()]
+        return [cams[i:i + 2] for i in range(0, len(cams), 2)] + [[(all_label, f"{cmd} todas")]]
+
+    def acting(action, fn):
+        def run(msg, chat, user, arg):
+            act = api.ChatAction(chat, action).start()    # «enviando foto/vídeo…»
+            try:
+                fn(msg, chat, user, arg)
+            finally:
+                act.stop()
+        return run
+
     def photo(msg, chat, user, arg):
         """Foto actual de una camara, o de todas en un album."""
         d = JOBS / f"cam_{int(time.time() * 1000)}"
         d.mkdir(parents=True, exist_ok=True)
         try:
-            chans = [camaras.resolve(arg)] if arg else camaras.channels()
+            if not arg:
+                api.say(chat, "📷 ¿Qué cámara?", buttons=cam_buttons("/foto_camaras", "📷 Todas"))
+                return
+            chans = camaras.channels() if arg.lower() == "todas" else [camaras.resolve(arg)]
             hora = time.strftime("%d/%m %H:%M")
             shots, fails = [], []
 
@@ -67,12 +86,27 @@ def setup(api):
         d.mkdir(parents=True, exist_ok=True)
         status = None
         try:
-            if arg.strip():
-                cam, start, end = camaras.parse_clip(arg)
-                cams = [camaras.resolve(cam)]
-            else:
+            toks = arg.split()
+            if not toks:
+                api.say(chat, "🎬 ¿De qué cámara?",
+                        buttons=cam_buttons("/clip_camaras", "🎬 Todas · último minuto"))
+                return
+            if len(toks) == 1 and toks[0].lower() != "todas":
+                n, name = camaras.resolve(toks[0])
+                api.say(chat, f"🎬 {name}: ¿qué tramo? (hasta ahora mismo)", buttons=[
+                    [(t, f"/clip_camaras {n} -{m}") for t, m in (("Último min", 1), ("5 min", 5), ("15 min", 15))],
+                    [(t, f"/clip_camaras {n} -{m}") for t, m in (("30 min", 30), ("1 hora", 60))]])
+                return
+            if toks[0].lower() == "todas":
                 start, end = camaras.last_minute()
                 cams = camaras.channels()
+            elif len(toks) == 2 and re.fullmatch(r"-\d{1,2}", toks[1]):   # los ultimos N minutos
+                end = camaras.last_minute()[1]
+                start = end - camaras.dt.timedelta(minutes=min(int(toks[1][1:]), camaras.MAX_CLIP_MIN))
+                cams = [camaras.resolve(toks[0])]
+            else:
+                cam, start, end = camaras.parse_clip(arg)
+                cams = [camaras.resolve(cam)]
             rango = f"{start:%d/%m/%Y %H:%M:%S}–{end:%H:%M:%S}"
             for i, (n, name) in enumerate(cams, 1):
                 step = f" ({i}/{len(cams)})" if len(cams) > 1 else ""
@@ -91,11 +125,16 @@ def setup(api):
                     cap += "\n<i>(vídeo H.265: si no se reproduce aquí, descárgalo)</i>"
                 api.edit(chat, status,
                          f"📤 Enviando {name}, {f.stat().st_size / 2**20:.1f} MB…{step}")
+                api._tl.sent_msgs = []
                 api.publish(chat, [f], cap, status)
                 log.info("clip camara %s %s (%s, %.1f MB)", n, rango, codec,
                          f.stat().st_size / 2**20)
                 api.delete(chat, status)
-                f.unlink()
+                # al archivo de N dias (si esta activado; /guardar lo copia al NAS)
+                api.archive_put([f], chat, list(api._tl.sent_msgs), None,
+                                f"Cámara {name} {start:%Y-%m-%d %H.%M}")
+                api._tl.sent_msgs = None
+                f.unlink(missing_ok=True)
         except camaras.CamError as e:
             if status:
                 api.delete(chat, status)
@@ -121,12 +160,12 @@ def setup(api):
     return {
         "commands": {
             "foto_camaras": {
-                "fn": photo, "anywhere": True,
+                "fn": acting("upload_photo", photo), "anywhere": True,
                 "help": "/foto_camaras [<i>cámara</i>] – foto actual de una cámara (número o "
                         "nombre) o de todas",
                 "menu": "Foto actual de las cámaras"},
             "clip_camaras": {
-                "fn": clip, "anywhere": True,
+                "fn": acting("upload_video", clip), "anywhere": True,
                 "help": "/clip_camaras <i>cámara [fecha] inicio fin</i> – fragmento grabado "
                         "(sin nada más: el último minuto de todas). Ej.: <i>2 14:59 15:02</i> · "
                         "<i>2 ayer 23:50 23:58</i> · <i>patio 17/10 2:59 3:02</i> (máx. 60 min)",

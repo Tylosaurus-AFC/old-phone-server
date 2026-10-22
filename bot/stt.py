@@ -18,6 +18,9 @@ from pathlib import Path
 STT = Path("/opt/stt")
 WHISPER_BIN = STT / "whisper.cpp" / "build" / "bin" / "whisper-cli"
 WHISPER_MODEL = "base-q5_1"           # se cambia por /transcribir modelo
+# Modelo "auto": el bueno para notas cortas y uno mas rapido para las largas, que con
+# turbo (~4x la duracion en un movil de gama media) tendrian el procesador ocupado mucho
+AUTO = ("large-v3-turbo-q5_0", "small-q5_1", 120)   # (hasta AUTO[2] s, mas largas)
 VOSK_MODEL = next((p for p in (STT / "vosk", STT / "vosk-es") if p.exists()), STT / "vosk")
 THREADS = min(8, os.cpu_count() or 2)   # con 2 nucleos, 2 hilos; con 8, los 8 (lo mas rapido medido)
 CONFIG = Path("/opt/bot/stt.json")    # {"model": ..., "lang": "es", "off": [chat_ids]}
@@ -36,12 +39,22 @@ def save_config(cfg):
     CONFIG.write_text(json.dumps(cfg))
 
 
-def whisper_model_path():
-    return STT / f"ggml-{config().get('model', WHISPER_MODEL)}.bin"
+def whisper_model(secs=0):
+    m = config().get("model", WHISPER_MODEL)
+    if m == "auto":
+        return AUTO[0] if secs <= AUTO[2] else AUTO[1]
+    return m
+
+
+def whisper_model_path(secs=0):
+    return STT / f"ggml-{whisper_model(secs)}.bin"
 
 
 def engine():
-    if WHISPER_BIN.exists() and whisper_model_path().exists():
+    if config().get("model") == "auto":
+        if WHISPER_BIN.exists() and all((STT / f"ggml-{m}.bin").exists() for m in AUTO[:2]):
+            return f"whisper auto ({AUTO[0].split('-q')[0]} hasta {AUTO[2] // 60} min, {AUTO[1].split('-q')[0]} si es más larga)"
+    elif WHISPER_BIN.exists() and whisper_model_path().exists():
         return f"whisper {config().get('model', WHISPER_MODEL)}"
     if VOSK_MODEL.exists():
         return "vosk"
@@ -59,8 +72,8 @@ def to_wav(src: Path, dst: Path):
         return w.getnframes() / w.getframerate()
 
 
-def _whisper(wav: Path, timeout):
-    p = subprocess.run([str(WHISPER_BIN), "-m", str(whisper_model_path()), "-f", str(wav),
+def _whisper(wav: Path, timeout, secs=0):
+    p = subprocess.run([str(WHISPER_BIN), "-m", str(whisper_model_path(secs)), "-f", str(wav),
                         "-l", config().get("lang", "es"), "-t", str(THREADS), "-nt", "-np"],
                        capture_output=True, text=True, timeout=timeout)
     if p.returncode:
@@ -110,13 +123,13 @@ def transcribe(src: Path, on_draft=None):
             except Exception as e:
                 log.info("stt borrador vosk: %s", e)
         try:
-            text = _whisper(wav, timeout=max(600, int(secs * 30)))
+            text = _whisper(wav, timeout=max(600, int(secs * 30)), secs=secs)
         except Exception as e:
             if not draft:
                 raise
             log.info("stt whisper fallo, me quedo con vosk: %s", e)
             return draft, secs, time.time() - t, "vosk"
-        return text, secs, time.time() - t, eng
+        return text, secs, time.time() - t, f"whisper {whisper_model(secs)}"
     finally:
         wav.unlink(missing_ok=True)
 

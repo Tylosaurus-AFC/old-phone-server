@@ -41,7 +41,8 @@ sys.modules["botmod"] = bot
 _spec.loader.exec_module(bot)
 
 SAID = []
-bot.say = lambda chat, text, reply_to=None, parse_mode=None: SAID.append((chat, text)) or 1
+BUTTONS = []      # inline buttons of the last say() that had them
+bot.say = lambda chat, text, reply_to=None, parse_mode=None, buttons=None:     (BUTTONS.append(buttons) if buttons else None, SAID.append((chat, text)))[1] or 1
 bot.delete = lambda *a, **k: True
 bot.edit = lambda *a, **k: None
 bot.BOT.update(id=999, username="testbot", first_name="Test")
@@ -141,6 +142,20 @@ class Dispatch(unittest.TestCase):
     def test_core_command_still_works(self):
         run_and_wait(msg("/help"))
         self.assertTrue(any("Qué hago" in t for _, t in SAID), SAID)
+
+    def test_owner_help_has_quick_buttons(self):
+        BUTTONS.clear()
+        run_and_wait(msg("/help"))
+        cmds = [d for row in (BUTTONS[-1] if BUTTONS else []) for _, d in row]
+        self.assertIn("/estado", cmds)
+        self.assertIn("/stats", cmds)
+        self.assertNotIn("/foto_camaras", cmds)      # cameras are a plugin, not a core button
+
+    def test_stats_with_empty_database(self):
+        bot.db.DB = Path(tempfile.mkdtemp()) / "bot.db"
+        self.assertIn("Aún no hay nada registrado", bot.stats_text(""))
+        bot.db.descarga(100, 1, "T", "youtube", "u", "video", "ok", 2**20, 3)
+        self.assertIn("youtube 1", bot.stats_text("hoy"))
 
 
 class CoreHelpers(unittest.TestCase):

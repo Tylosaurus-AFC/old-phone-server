@@ -86,13 +86,15 @@ tools/noroot-bot.sh enable           # ¡a andar!
   subidas de 2 GB por MTProto, caché instantánea, MP3, PDF → imágenes, canales de YouTube seguidos, control
   de acceso por usuario, manejo de cookies, actualización diaria automática, `/salud` `/historial` `/bateria`,
   voz a texto local, canales de YouTube seguidos publicados en un chat privado y/o un canal de Telegram,
-  Instagram/Facebook primero sin sesión y con enlaces limpios.
+  Instagram/Facebook primero sin sesión y con enlaces limpios, botones (MP3 / original / guardar en el disco bajo cada
+  vídeo), búsqueda en YouTube con `/buscar`, cola con cancelación (`/cola`), `/stats` desde un registro SQLite y un
+  archivo opcional de 7 días con `/guardar` al disco USB.
 * **Plugins:** extras que se enchufan — fotos de cámaras de seguridad (Dahua), avisos por Alexa,
   scrobbling de YouTube Music a Last.fm, likes de YouTube Music → canal de Telegram, stickers de vídeo — y una API
   sencilla para los tuyos.
-* **Recetas de NAS / servidor multimedia** para un móvil con disco USB: WebDAV, DLNA, Jellyfin, espejo de YouTube.
+* **Recetas de NAS / servidor multimedia** para un móvil con disco USB: WebDAV, DLNA, Jellyfin, espejo de YouTube, respaldo semanal.
 * **Operación:** despliegue, respaldo/restauración de la configuración y de todo el Debian, mudanza a otro móvil.
-* **Pruebas que no necesitan móvil:** `tests/run.sh` (70 comprobaciones: lógica de batería contra una batería falsa,
+* **Pruebas que no necesitan móvil:** `tests/run.sh` (72 comprobaciones: lógica de batería contra una batería falsa,
   el vigilante sin root contra un Shizuku falso, esperas tras caídas y secuencia de arranque, carga de plugins,
   despacho de comandos, utilidades).
 
