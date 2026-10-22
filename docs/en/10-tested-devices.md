@@ -5,22 +5,23 @@ for yours. (Numbers are from the original installation, October 2026.)
 
 ## At a glance
 
-| | Galaxy S4 mini | Moto X2 | Galaxy Tab A7 |
-|---|---|---|---|
-| Model | Samsung SCH-I435 (Verizon) | Motorola XT1097 "victara" | Samsung SM-T500 |
-| Year / Android | 2013 / **4.4.2** | 2014 / **11** (LineageOS 18.1, userdebug, microG) | 2020 / **16** (LineageOS 23) |
-| CPU | Snapdragon 400, 2 cores 1.7 GHz, **32-bit** | Snapdragon 801, 32-bit | Snapdragon 662, 8 cores, **64-bit** |
-| RAM | 1.3 GB + 1 GB vnswap | 2 GB + zram 1 GB | 2.7 GB + zram 2 GB |
-| Free storage with Debian | 7.9 GB of 11.5 | – | ~7 GB of 22 |
-| Battery | 1900 mAh | 2281 mAh (healthy) | 7040 mAh |
-| Bootloader | **locked** (Verizon) | unlocked | unlocked |
-| Root | KingRoot (route B) | `adb root` (userdebug, route C) | Magisk 30.7 (route A) |
-| `ARCH` | armhf | armhf | **arm64** |
-| `ROOT_MODE` / `BOOT_MODE` | `su` / `kingroot` | `adbroot` / `initrc` | `su` / `magisk` |
-| `BB_PATH` | `/system/xbin/busybox-deb` | `/data/debian/busybox-deb` | `/data/debian/busybox-deb` (Magisk's busybox) |
-| `BATT_CTRL` | `slate` | `enable` | `slate` |
-| Special in `server.conf` | defaults, `LOW=40 HIGH=60` | `FIX_ROUTE=1`, `ADB_TCP_PROP=persist.adb.tcp.port`, `LOW=25 HIGH=65` | `DOZE_OFF=1`, `LINEAGE_CHARGE_CTRL_OFF=1`, `WIFI_MIN=-85`, `ADB_RESTART="setprop ctl.restart adbd"` |
-| Role | production 24/7 | cold spare | test bench / candidate |
+| | Galaxy S4 mini | Moto X2 | Galaxy Tab A7 | Realme 12+ 5G |
+|---|---|---|---|---|
+| Model | Samsung SCH-I435 (Verizon) | Motorola XT1097 "victara" | Samsung SM-T500 | Realme RMX3867 |
+| Year / Android | 2013 / **4.4.2** | 2014 / **11** (LineageOS 18.1, userdebug, microG) | 2020 / **16** (LineageOS 23) | 2024 / **16** (Realme UI 7) |
+| CPU | Snapdragon 400, 2 cores 1.7 GHz, **32-bit** | Snapdragon 801, 32-bit | Snapdragon 662, 8 cores, **64-bit** | Dimensity 7050: 2×A78 2.6 GHz + 6×A55 2.0 GHz, **64-bit** |
+| RAM | 1.3 GB + 1 GB vnswap | 2 GB + zram 1 GB | 2.7 GB + zram 2 GB | **12 GB** (~7.5 GB free at idle) |
+| Storage | 7.9 GB free of 11.5 | – | ~7 GB free of 22 | ~205 GB free of 256 (+ a 466 GB USB disk) |
+| Battery | 1900 mAh | 2281 mAh (healthy) | 7040 mAh | 5000 mAh |
+| Bootloader | **locked** (Verizon) | unlocked | unlocked | **locked** (root attempt failed) |
+| Mode | root + chroot | root + chroot | root + chroot | **no root**: Termux + proot + Shizuku ([12](12-no-root.md)) |
+| Root route | KingRoot (B) | `adb root` (C) | Magisk 30.7 (A) | none |
+| `ARCH` / container | armhf | armhf | **arm64** | arm64 (proot-distro) |
+| `ROOT_MODE` / `BOOT_MODE` | `su` / `kingroot` | `adbroot` / `initrc` | `su` / `magisk` | – / Termux:Boot |
+| `BB_PATH` | `/system/xbin/busybox-deb` | `/data/debian/busybox-deb` | `/data/debian/busybox-deb` (Magisk's) | – |
+| Charger control | `BATT_CTRL=slate` | `enable` | `slate` | the maker's own limit (80 %), reported by `charge.sh` |
+| Special in `server.conf` | defaults, `LOW=40 HIGH=60` | `FIX_ROUTE=1`, `ADB_TCP_PROP=persist.adb.tcp.port`, `LOW=25 HIGH=65` | `DOZE_OFF=1`, `LINEAGE_CHARGE_CTRL_OFF=1`, `WIFI_MIN=-85`, `ADB_RESTART="setprop ctl.restart adbd"` | `OEM=oplus` (no-root `server.conf`) |
+| Role | production 24/7 | cold spare | test bench | test server, candidate for production |
 
 ## Galaxy S4 mini (Verizon SCH-I435, Android 4.4.2) — the reference
 
@@ -91,6 +92,48 @@ Measured against the S4 mini:
 
 What does **not** improve: normal downloads (limited by your Internet and the sites), and
 anything dominated by the access point rather than the phone.
+
+## Realme 12+ 5G (RMX3867, Android 16, Realme UI 7) — no root
+
+* **Locked bootloader and no unlock route** (Realme offers no "Deep Testing" app for this model): the root
+  attempt failed, so it runs **[no-root mode](12-no-root.md)**: Termux + proot-distro Debian + Shizuku (thedjchi fork).
+* The ColorOS particulars: *Developer options → Disable permission monitoring: On* (Shizuku needs it); the
+  charge limiter is the phone's own (*Battery health → Custom charge limit → 80 %*, readable as
+  `settings system regular_charge_protection_*`); nine system packages cannot be removed or disabled from adb;
+  `cmd appops set`, `pm grant` and `pm disable-user` are blocked for protected Oplus apps (use the UI).
+* 142 packages removed with `pm uninstall -k --user 0` (reversible); **~7.5 GB RAM free at idle**.
+
+Measured (test bot, Wi-Fi 5 GHz at −70 dBm unless noted):
+
+| Task | S4 mini | Tab A7 | **Realme** |
+|---|---|---|---|
+| `/velocidad` | 50–66 ↓ / 48–54 ↑ Mbps | 47–72 ↓ / 68–76 ↑ | **160 ↓ / 155 ↑** (187 ↓ / 137 ↑ at −35 dBm) |
+| Short YouTube clip (19 s) | – | 16 s | 10 s |
+| YouTube 1080p, 5 min, large upload | 154 MB in ~2 min | 255 MB in 105 s | **48 s** (download 28 s + upload 19 s) |
+| `/mp3` | 10 min of audio in 95 s | ~22 s per 10 min | 3.5 min in 29 s |
+| Photo from 4 cameras (plugin) | ~8 s | 13 s | **4.6 s** |
+| Whisper `base`, 33 s of audio | ~4× | ~0.5× | **0.34×** (11 s) |
+| Whisper `small`, 33 s of audio | ~13× | 1.2–1.4× | **1.06×** (35 s) |
+| 6 parallel 1080p YouTube downloads (5–13 min videos) | – | – | **all in 3 min 19 s**, min. free RAM 8.8 GB, battery ≤ 27.6 °C |
+| A 1-hour 8K video | – | – | 1080p exceeded 2 GB → redone at 720p (336 MB): 10 min 45 s, ~7.5 of them wasted on the first attempt; upload ~7.6 MB/s |
+| Instagram reel / carousel / Facebook / TikTok | – | – | 12 s / 16 s / 16 s / 17 s |
+
+Real Spanish speech, 60 s, 8 threads — **model quality matters more than speed here**:
+
+| Whisper model | Time | Quality |
+|---|---|---|
+| base | 48 s (0.8×) | poor (garbled names) |
+| small | 129 s (2.2×) | good |
+| medium | 387 s (6.5×) | good |
+| **large-v3-turbo** | 254 s (4.2×) | the best |
+
+Local LLM (llama.cpp, Qwen2.5 Q4_K_M): 1.5B ≈ 24 tokens/s reading and **~6 tokens/s writing**; 3B ≈ 12 and
+**~3.5**. Fewer threads were better (4 beat 8); pinned to the two A78 cores it is slower (the vendor caps their
+clock). Fine for short, unhurried summaries, not for chatting. "High performance mode" changed nothing: the limit
+is the chip and its memory, so it only adds heat.
+
+Supervision tests, the full feature checklist, the USB disk/NAS numbers and the hub problems are in
+[12 · No-root mode](12-no-root.md) and [13 · Media recipes](13-media-recipes.md).
 
 ## Add your phone
 

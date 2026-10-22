@@ -3,8 +3,8 @@
 **old-phone-server** turns an old Android phone into a small, quiet, always-on Linux server,
 and ships a real application to run on it: a Telegram bot that downloads videos and photos
 from social networks. It was built to rescue phones that are too old for anything else
-(a Galaxy S4 mini from 2013 running Android 4.4 has been serving 24/7), and it was later
-reproduced on a Moto X2 and a Galaxy Tab A7.
+(a Galaxy S4 mini from 2013 running Android 4.4 has been serving 24/7), then reproduced on a
+Moto X2 and a Galaxy Tab A7, and finally — **without root** — on a modern Realme 12+.
 
 Everything in this repository comes from machines that actually ran, with the problems that
 showed up along the way written down. The guides do not stop at "it works": they say what
@@ -43,6 +43,9 @@ breaks, why, and how to recover.
 * **Why two watchdogs?** `bot.sh` and `charge.sh` watch each other: if one dies the other
   relaunches it within a minute. `charge.sh` also notices a bot that is alive but *frozen* (it
   stops writing its heartbeat) and kills it so `bot.sh` starts a fresh one.
+* **And without root?** A second flavour runs the same Debian and bot inside **Termux** (proot) and uses
+  **Shizuku** for the few system powers the watchdog needs. Same bot, same plugins, same ideas; the
+  charger cannot be switched, only reported. See [12 · No-root mode](12-no-root.md).
 * **Why care about the battery?** A phone kept at 100 % on a charger for years swells and can
   become dangerous. `charge.sh` switches the charger on and off to hold 40–60 %
   (see [06 · Battery and heat](06-battery-and-heat.md)).
@@ -59,8 +62,12 @@ A Telegram bot, in Spanish (strings are easy to translate; see [FAQ](11-faq-and-
 * **Voice notes → text**, entirely on the phone (whisper.cpp + Vosk), nothing sent to the cloud.
 * Health: `/estado`, `/salud`, `/historial`, `/bateria`, `/velocidad`, automatic alerts
   (expired cookies, hot battery, low disk, Internet or Telegram outages, power cuts).
+* **Telegram channels as destinations:** followed YouTube channels can be posted to your private chat,
+  to a Telegram channel of yours, or both (`/canal`, `/destino`).
 * **Plugins** for things that only suit some people: CCTV snapshots, Alexa announcements,
-  Last.fm scrobbling, sticker maker ([09 · Plugins](09-plugins.md)).
+  Last.fm scrobbling, YouTube-Music likes → channel, sticker maker ([09 · Plugins](09-plugins.md)).
+* **NAS and media server** recipes for a phone with a USB disk: WebDAV, DLNA, Jellyfin, a YouTube
+  mirror ([13 · Media recipes](13-media-recipes.md)).
 
 You can ignore the bot entirely and use the phone as a Debian server for something else:
 everything up to and including [05](05-services-and-boot.md) is application-independent.
@@ -69,8 +76,9 @@ everything up to and including [05](05-services-and-boot.md) is application-inde
 
 You need **all** of these:
 
-1. **Root.** There is no way around it for the chroot. Getting root is device specific and the
-   riskiest step ([02 · Root](02-root.md)).
+1. **Root** for the chroot mode — getting it is device specific and the riskiest step
+   ([02 · Root](02-root.md)) — **or** a reasonably modern phone (Android 11+ recommended) for the
+   no-root mode ([12](12-no-root.md)).
 2. **≥ 3 GB of free storage** (Debian + bot ≈ 1.3 GB, voice models ≈ 0.3 GB, and working room for
    downloads: a long video can be several GB) and **≥ 1 GB of RAM** (the S4 mini has 1.3 GB and
    runs three simultaneous downloads).
@@ -79,18 +87,20 @@ You need **all** of these:
 
 ### Other projects, for other phones
 
-This project is deliberately aimed at **old phones with root**. If yours is newer or you do not
-want to root, these are better starting points (independent projects, not affiliated with this one):
+This project has two modes: **root + chroot** (the only option for the oldest phones) and **no-root +
+Termux/proot** (for modern ones). If what you want is not a 24/7 bot-style server, these independent projects
+(not affiliated with this one) may fit better:
 
 | Your phone | Try |
 |---|---|
-| Android 10+, 64-bit, no root | [homedroid](https://github.com/sudiptacmd/homedroid): one APK (SSH, Jellyfin, Immich, AdGuard…) with its own proot |
+| Android 10+, 64-bit, no root, wants ready-made apps | [homedroid](https://github.com/sudiptacmd/homedroid): one APK (SSH, Jellyfin, Immich, AdGuard…) with its own proot |
 | 64-bit, no root, wants a desktop or Home Assistant | [mayukh4/linux-android](https://github.com/mayukh4/linux-android): Termux + Termux-X11 + proot |
 | Rooted with Magisk, wants a step-by-step Termux guide | [MultiX0/old-phone-to-server](https://github.com/MultiX0/old-phone-to-server) and [Nikhil-Richhariya/Android-Phone-as-Server](https://github.com/Nikhil-Richhariya/Android-Phone-as-Server) |
-| **Android 4.4–9, 32-bit or 64-bit, rootable, needs to run 24/7** | **this project** |
+| **Android 4.4–10, 32- or 64-bit, rootable, must run 24/7** | **this project, root mode** |
+| **Android 11+, no root, a 24/7 service with watchdogs, a Telegram bot and optional NAS** | **this project, no-root mode** |
 
 What sets this one apart: it supports phones where current Termux cannot even install
-(Termux needs Android 7+), uses a native chroot instead of proot, and includes the unglamorous
+(Termux needs Android 7+), offers a native chroot as well as the proot mode, and includes the unglamorous
 parts of running 24/7: watchdogs, crash back-off, Wi-Fi recovery, battery charge limits,
 backups and restore, and a documented recovery procedure for every failure we hit.
 
@@ -107,5 +117,7 @@ backups and restore, and a documented recovery procedure for every failure we hi
 | 07 | [Network](07-network.md) | fixed IP, adb over Wi-Fi, Wi-Fi problems, Ethernet |
 | 08 | [Operations](08-operations.md) | update, back up, restore, troubleshoot |
 | 09 | [Plugins](09-plugins.md) | optional extras and how to write your own |
-| 10 | [Tested devices](10-tested-devices.md) | measurements and quirks of three real phones |
+| 10 | [Tested devices](10-tested-devices.md) | measurements and quirks of four real devices |
 | 11 | [FAQ and safety](11-faq-and-safety.md) | legal, security, risks, common questions |
+| 12 | [No-root mode](12-no-root.md) | the same server with Termux + proot + Shizuku, no root needed |
+| 13 | [Media recipes](13-media-recipes.md) | optional NAS / DLNA / Jellyfin / YouTube mirror on a USB disk |

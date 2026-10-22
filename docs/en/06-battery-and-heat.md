@@ -35,6 +35,14 @@ the bot notices (two points of drop within an hour while "paused", or `Dischargi
 charging) and tells you, then reports how long the battery lasted when the power returns
 (`/bateria` keeps the last cut and estimates the autonomy from it).
 
+## No root? The maker's limiter does the job
+
+In [no-root mode](12-no-root.md) nothing can switch the charger, so turn on the phone's own limit (Realme:
+*Battery → Battery health → Custom charge limit*; Samsung "Protect battery"; Pixel "Limit to 80 %"; Xiaomi
+"Battery protection"). The watchdog reports "plugged in but not charging" as a paused charge. The Realme runs
+at an 80 % limit, and six parallel 1080p downloads kept its battery at ≤ 27.6 °C. Everything else on
+this page (inspection, ventilation, heat) applies unchanged.
+
 ## Finding your phone's charge switch
 
 Linux exposes the charger driver in sysfs. Look at what your phone has:

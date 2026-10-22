@@ -1,5 +1,15 @@
 # 01 · Preparación: PC, móvil y ajustes
 
+## Elige primero tu modo
+
+| | **Modo root** (chroot) | **Modo sin root** (Termux + proot) |
+|---|---|---|
+| Móvil | viejo (Android 4.4–10) o cualquiera que se pueda rootear | moderno, se recomienda Android 11+; no hace falta root |
+| Control del cargador | sí, por script | solo el límite del propio fabricante |
+| Guías siguientes | 02 → 03 → 05 → 06 | [12 · Modo sin root](12-modo-sin-root.md) (sustituye a 02, 03 y 05) |
+
+Esta página vale para los dos (adb se usa en ambos: para instalar apps y ajustar Android).
+
 ## Qué necesitas
 
 **Hardware**
@@ -17,6 +27,7 @@
 | `adb` (Android platform-tools) | hablar con el móvil | <https://developer.android.com/tools/releases/platform-tools> |
 | `bash` | correr los scripts de `tools/` | Linux/macOS: ya viene. Windows: **Git Bash** (incluido en [Git para Windows](https://git-scm.com/download/win)) |
 | `curl`, `xz`, `gzip`, `sha256sum` | descargar y preparar Debian | vienen con Git Bash y casi todo Linux/macOS |
+| `ssh`, `scp` (cliente OpenSSH) | solo **modo sin root**: hablas con Termux por SSH | incluido en Windows 10+, Linux, macOS |
 | Python 3 + `pip install requests` | solo para correr las pruebas (opcional) | |
 
 **Cuentas**: una cuenta de Telegram (para hablar con @BotFather y con el bot). Nada más.
@@ -75,6 +86,7 @@ Abre `config.sh` y ajusta al menos:
 | `BOOT_MODE` | `magisk`, `kingroot` o `initrc`: se decide en [02](02-root.md) y [05](05-servicios-y-arranque.md) |
 | `BB_PATH` | `/data/debian/busybox-deb`, **salvo** en kernels Samsung viejos, ver [03](03-instalacion.md#3-busybox) |
 | `TZ_NAME` | tu zona horaria, p. ej. `Europe/Madrid`, `America/Mexico_City` |
+| `NOROOT_SSH`, `NOROOT_IP`, `CONTAINER` | solo **modo sin root**: alias ssh del móvil, su IP y el nombre del contenedor de proot-distro ([12](12-modo-sin-root.md)) |
 
 `config.sh` está en `.gitignore`. Déjalo así.
 

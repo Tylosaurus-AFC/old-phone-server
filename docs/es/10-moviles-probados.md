@@ -5,22 +5,23 @@ para el tuyo. (Las cifras vienen de la instalación original, octubre de 2026.)
 
 ## De un vistazo
 
-| | Galaxy S4 mini | Moto X2 | Galaxy Tab A7 |
-|---|---|---|---|
-| Modelo | Samsung SCH-I435 (Verizon) | Motorola XT1097 «victara» | Samsung SM-T500 |
-| Año / Android | 2013 / **4.4.2** | 2014 / **11** (LineageOS 18.1, userdebug, microG) | 2020 / **16** (LineageOS 23) |
-| CPU | Snapdragon 400, 2 núcleos 1,7 GHz, **32 bits** | Snapdragon 801, 32 bits | Snapdragon 662, 8 núcleos, **64 bits** |
-| RAM | 1,3 GB + 1 GB vnswap | 2 GB + zram 1 GB | 2,7 GB + zram 2 GB |
-| Libre con Debian | 7,9 GB de 11,5 | – | ~7 GB de 22 |
-| Batería | 1900 mAh | 2281 mAh (sana) | 7040 mAh |
-| Bootloader | **bloqueado** (Verizon) | desbloqueado | desbloqueado |
-| Root | KingRoot (ruta B) | `adb root` (userdebug, ruta C) | Magisk 30.7 (ruta A) |
-| `ARCH` | armhf | armhf | **arm64** |
-| `ROOT_MODE` / `BOOT_MODE` | `su` / `kingroot` | `adbroot` / `initrc` | `su` / `magisk` |
-| `BB_PATH` | `/system/xbin/busybox-deb` | `/data/debian/busybox-deb` | `/data/debian/busybox-deb` (busybox de Magisk) |
-| `BATT_CTRL` | `slate` | `enable` | `slate` |
-| Especial en `server.conf` | valores por defecto, `LOW=40 HIGH=60` | `FIX_ROUTE=1`, `ADB_TCP_PROP=persist.adb.tcp.port`, `LOW=25 HIGH=65` | `DOZE_OFF=1`, `LINEAGE_CHARGE_CTRL_OFF=1`, `WIFI_MIN=-85`, `ADB_RESTART="setprop ctl.restart adbd"` |
-| Papel | producción 24/7 | repuesto en frío | banco de pruebas / candidata |
+| | Galaxy S4 mini | Moto X2 | Galaxy Tab A7 | Realme 12+ 5G |
+|---|---|---|---|---|
+| Modelo | Samsung SCH-I435 (Verizon) | Motorola XT1097 «victara» | Samsung SM-T500 | Realme RMX3867 |
+| Año / Android | 2013 / **4.4.2** | 2014 / **11** (LineageOS 18.1, userdebug, microG) | 2020 / **16** (LineageOS 23) | 2024 / **16** (Realme UI 7) |
+| CPU | Snapdragon 400, 2 núcleos 1,7 GHz, **32 bits** | Snapdragon 801, 32 bits | Snapdragon 662, 8 núcleos, **64 bits** | Dimensity 7050: 2×A78 2,6 GHz + 6×A55 2,0 GHz, **64 bits** |
+| RAM | 1,3 GB + 1 GB vnswap | 2 GB + zram 1 GB | 2,7 GB + zram 2 GB | **12 GB** (~7,5 GB libres en reposo) |
+| Almacenamiento | 7,9 GB libres de 11,5 | – | ~7 GB libres de 22 | ~205 GB libres de 256 (+ un disco USB de 466 GB) |
+| Batería | 1900 mAh | 2281 mAh (sana) | 7040 mAh | 5000 mAh |
+| Bootloader | **bloqueado** (Verizon) | desbloqueado | desbloqueado | **bloqueado** (el intento de root falló) |
+| Modo | root + chroot | root + chroot | root + chroot | **sin root**: Termux + proot + Shizuku ([12](12-modo-sin-root.md)) |
+| Ruta de root | KingRoot (B) | `adb root` (C) | Magisk 30.7 (A) | ninguna |
+| `ARCH` / contenedor | armhf | armhf | **arm64** | arm64 (proot-distro) |
+| `ROOT_MODE` / `BOOT_MODE` | `su` / `kingroot` | `adbroot` / `initrc` | `su` / `magisk` | – / Termux:Boot |
+| `BB_PATH` | `/system/xbin/busybox-deb` | `/data/debian/busybox-deb` | `/data/debian/busybox-deb` (el de Magisk) | – |
+| Control del cargador | `BATT_CTRL=slate` | `enable` | `slate` | el límite del fabricante (80 %), que informa `charge.sh` |
+| Especial en `server.conf` | valores por defecto, `LOW=40 HIGH=60` | `FIX_ROUTE=1`, `ADB_TCP_PROP=persist.adb.tcp.port`, `LOW=25 HIGH=65` | `DOZE_OFF=1`, `LINEAGE_CHARGE_CTRL_OFF=1`, `WIFI_MIN=-85`, `ADB_RESTART="setprop ctl.restart adbd"` | `OEM=oplus` (el `server.conf` del modo sin root) |
+| Papel | producción 24/7 | repuesto en frío | banco de pruebas | servidor de pruebas, candidato a producción |
 
 ## Galaxy S4 mini (Verizon SCH-I435, Android 4.4.2) — la referencia
 
@@ -92,6 +93,50 @@ Medido frente al S4 mini:
 
 Lo que **no** mejora: las descargas normales (las limita tu Internet y los sitios), y todo lo que
 dependa del punto de acceso y no del móvil.
+
+## Realme 12+ 5G (RMX3867, Android 16, Realme UI 7) — sin root
+
+* **Bootloader bloqueado y sin forma de desbloquearlo** (Realme no ofrece la app de «Deep Testing» para este
+  modelo): el intento de root falló, así que corre el **[modo sin root](12-modo-sin-root.md)**: Termux +
+  Debian en proot-distro + Shizuku (fork de thedjchi).
+* Particularidades de ColorOS: *Opciones de desarrollador → Disable permission monitoring: On* (Shizuku lo
+  necesita); el limitador de carga es el del propio móvil (*Salud de la batería → Límite de carga personalizado →
+  80 %*, legible como `settings system regular_charge_protection_*`); nueve paquetes del sistema no se pueden
+  quitar ni desactivar desde adb; `cmd appops set`, `pm grant` y `pm disable-user` están bloqueados para las apps Oplus
+  protegidas (usa la interfaz).
+* 142 paquetes quitados con `pm uninstall -k --user 0` (reversible); **~7,5 GB de RAM libres en reposo**.
+
+Medido (bot de pruebas, Wi-Fi 5 GHz a −70 dBm salvo indicación):
+
+| Tarea | S4 mini | Tab A7 | **Realme** |
+|---|---|---|---|
+| `/velocidad` | 50–66 ↓ / 48–54 ↑ Mbps | 47–72 ↓ / 68–76 ↑ | **160 ↓ / 155 ↑** (187 ↓ / 137 ↑ a −35 dBm) |
+| YouTube corto (19 s) | – | 16 s | 10 s |
+| YouTube 1080p, 5 min, subida grande | 154 MB en ~2 min | 255 MB en 105 s | **48 s** (descarga 28 s + subida 19 s) |
+| `/mp3` | 10 min de audio en 95 s | ~22 s por cada 10 min | 3,5 min en 29 s |
+| Foto de 4 cámaras (plugin) | ~8 s | 13 s | **4,6 s** |
+| Whisper `base`, 33 s de audio | ~4× | ~0,5× | **0,34×** (11 s) |
+| Whisper `small`, 33 s de audio | ~13× | 1,2–1,4× | **1,06×** (35 s) |
+| 6 descargas paralelas de YouTube 1080p (vídeos de 5–13 min) | – | – | **todas en 3 min 19 s**, RAM libre mínima 8,8 GB, batería ≤ 27,6 °C |
+| Un vídeo de 1 hora en 8K | – | – | a 1080p pasaba de 2 GB → rehecho a 720p (336 MB): 10 min 45 s, ~7,5 de ellos perdidos en el primer intento; subida ~7,6 MB/s |
+| Reel / carrusel de Instagram / Facebook / TikTok | – | – | 12 s / 16 s / 16 s / 17 s |
+
+Español real, 60 s, 8 hilos — **aquí la calidad del modelo importa más que la velocidad**:
+
+| Modelo de Whisper | Tiempo | Calidad |
+|---|---|---|
+| base | 48 s (0,8×) | mala (nombres deformados) |
+| small | 129 s (2,2×) | buena |
+| medium | 387 s (6,5×) | buena |
+| **large-v3-turbo** | 254 s (4,2×) | la mejor |
+
+LLM local (llama.cpp, Qwen2.5 Q4_K_M): 1,5B ≈ 24 tokens/s leyendo y **~6 tokens/s escribiendo**; 3B ≈ 12 y **~3,5**.
+Con menos hilos fue mejor (4 superó a 8); fijado a los dos núcleos A78 va peor (el fabricante les limita el reloj).
+Sirve para resúmenes cortos sin prisa, no para conversar. El «modo de alto rendimiento» no cambió nada: el límite es
+el chip y su memoria, así que solo añade calor.
+
+Las pruebas de supervisión, la lista completa de funciones, las cifras del disco USB/NAS y los problemas del hub están
+en [12 · Modo sin root](12-modo-sin-root.md) y [13 · Recetas multimedia](13-recetas-multimedia.md).
 
 ## Añade tu móvil
 

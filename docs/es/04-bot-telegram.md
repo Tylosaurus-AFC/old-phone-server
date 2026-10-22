@@ -15,7 +15,7 @@ token, un despliegue y un dueño.
 3. Ponlo en el móvil (se pide en silencio y se guarda con `chmod 600`):
 
 ```bash
-tools/set-token.sh
+tools/set-token.sh              # modo sin root: tools/noroot-bot.sh token
 ```
 
 ## 2. Opcional: subidas de hasta 2 GB
@@ -34,6 +34,7 @@ resoluciones menores).
 ```bash
 tools/deploy.sh          # copia bot/, plugins y scripts del móvil; revisa la sintaxis en el móvil
 tools/enable-bot.sh      # crea /data/debian/BOT_ENABLED y arranca bot.sh
+# modo sin root:  tools/noroot-deploy.sh  y  tools/noroot-bot.sh enable
 ```
 
 El bot **solo corre donde existe `BOT_ENABLED`.** Ese archivo es un seguro: el mismo token no
@@ -52,7 +53,8 @@ Después:
 |---|---|
 | usarlo en un grupo | añade el bot al grupo **siendo el dueño** (si lo añade otro, el bot se va). Hazlo administrador con permiso de *borrar mensajes* para que pueda quitar el mensaje del enlace |
 | que un amigo lo use por privado | le escribe al bot; te llega una solicitud con su id; manda `/permitir ID` (`/quitar ID`, `/usuarios`) |
-| seguir un canal de YouTube | `/seguir <enlace del canal>`; los vídeos nuevos se publican en 1080p (`/canales`, `/dejar N`) |
+| seguir un canal de YouTube | `/seguir <enlace del canal> [privado\|canal\|ambos]`; los vídeos nuevos se publican en 1080p, sin Shorts, revisados cada 5 min (`/canales`, `/destino N …`, `/dejar N`) |
+| publicarlos en un **canal** de Telegram | crea un canal, añade el bot como administrador solo con *Publicar mensajes* (desactiva *Firmar mensajes* para que no salga su nombre) — el bot lo detecta solo y te avisa; `/canal` lista y asigna canales. Si falla la publicación en el canal, el vídeo se deja en tu chat privado con un aviso |
 
 ## 5. Uso
 
@@ -67,7 +69,8 @@ Basta con mandar un enlace. Comandos:
 | `/estado` `/velocidad` `/acerca` `/help` | todos | estado, prueba de velocidad, acerca de, ayuda |
 | `/cookies` (+ mandar un `.txt`) | dueño | estado/renovación de cookies de Instagram y Facebook |
 | `/actualizar` | dueño | actualizar yt-dlp y gallery-dl ya (también automático cada 24 h) |
-| `/seguir` `/canales` `/dejar` | dueño | canales de YouTube |
+| `/seguir` `/canales` `/destino` `/dejar` | dueño | canales de YouTube y adónde se publica cada uno (privado, canal o ambos) |
+| `/canal` | dueño | canales de Telegram donde publica el bot y para qué sirve cada uno (`/canal videos N`, `/canal quitar N`; los plugins añaden más usos) |
 | `/permitir` `/quitar` `/usuarios` | dueño | quién puede usarlo por privado |
 | `/salud` `/historial [N]` `/bateria` | dueño | comprobaciones, registro de eventos, detalle de batería y cortes de luz |
 | `/reiniciar confirmar` · `adb` · `wifi` | dueño | reiniciar el móvil · solo adb · reconectar el Wi-Fi |
@@ -82,6 +85,13 @@ Estos sitios exigen una sesión iniciada. Usa una **cuenta secundaria**, nunca l
 3. Manda el archivo al bot **por privado**. Lo guarda (`chmod 600`) y **borra tu mensaje**.
 
 El bot avisa cuando caducan o el sitio las bloquea, y `/salud` muestra la fecha de caducidad.
+
+**Cómo consigue el bot un enlace** (para que puedas prever fallos): Instagram y Facebook se prueban **primero sin
+sesión** (yt-dlp, luego el embed de la propia página, luego gallery-dl) y las cookies solo se usan si eso falla — una
+publicación pública nunca toca tu cuenta. Los pies se limpian: el enlace bajo un vídeo no lleva rastreadores
+(`?si=`, `igsh`, `fbclid`, `img_index`…), los enlaces de YouTube son canónicos y la caché trata la misma publicación
+con distintos rastreadores como una sola. Cada trabajo tiene su propia carpeta de trabajo, así que dos descargas
+nunca se pisan.
 
 ### Notas de voz a texto (opcional)
 

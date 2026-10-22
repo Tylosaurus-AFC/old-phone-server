@@ -1,5 +1,6 @@
 #!/bin/bash
-# Runs INSIDE the Debian chroot (tools/install.sh provision pushes and runs it).
+# Runs INSIDE Debian: the root-mode chroot (tools/install.sh provision) or the no-root proot
+# container (tools/noroot-install.sh provision; verified there: 7 min 25 s on a Realme 12+).
 # Prepares Debian for the bot: network quirks of Android, packages, Python virtualenv.
 #   TZ_NAME=Europe/Madrid  time zone (Debian comes in UTC)       [default UTC]
 set -e
@@ -22,7 +23,7 @@ apt-get update
 # python3-* from apt: prebuilt, so pip does not have to compile them on a slow old CPU.
 # gcc & co. are only needed to build TgCrypto and are purged afterwards.
 apt-get install -y --no-install-recommends \
-  python3 python3-venv ca-certificates ffmpeg nodejs curl procps iw poppler-utils \
+  python3 python3-venv ca-certificates tzdata ffmpeg nodejs curl procps iw poppler-utils \
   python3-brotli python3-pycryptodome python3-websockets python3-requests \
   python3-certifi python3-mutagen python3-urllib3 \
   gcc libc6-dev python3-dev

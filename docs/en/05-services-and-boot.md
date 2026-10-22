@@ -19,6 +19,8 @@ power on → Android boots
                   └─ forever:  charge.sh ; sleep 60   (relaunched if it ever dies)
 ```
 
+(**No-root mode has its own, simpler chain** — Termux:Boot → `00-server.sh` → `bot.sh` + `charge.sh` — described in [12](12-no-root.md).)
+
 Each launcher is a few lines whose only job is to run `start.sh` as root. Install the one for
 your phone with `tools/install.sh boot` (it reads `BOOT_MODE` from `config.sh`).
 

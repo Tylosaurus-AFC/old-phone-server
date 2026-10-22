@@ -19,6 +19,8 @@ enciende → Android arranca
                   └─ para siempre:  charge.sh ; sleep 60   (se relanza si muere)
 ```
 
+(**El modo sin root tiene su propia cadena, más simple** — Termux:Boot → `00-server.sh` → `bot.sh` + `charge.sh` — descrita en [12](12-modo-sin-root.md).)
+
 Cada lanzador son unas pocas líneas cuyo único trabajo es ejecutar `start.sh` como root. Instala
 el de tu móvil con `tools/install.sh boot` (lee `BOOT_MODE` de `config.sh`).
 

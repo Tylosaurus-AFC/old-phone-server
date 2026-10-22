@@ -1,5 +1,7 @@
 # 03 · Instalación: busybox, Debian y los scripts
 
+> **¿Sin root?** Esta página es del modo root. Usa [12 · Modo sin root](12-modo-sin-root.md).
+
 Supone: el móvil ya tiene root ([02](02-root.md)), la depuración USB funciona y `config.sh` está
 rellenado ([01](01-preparacion.md)). Todos los comandos se ejecutan en tu **PC**, desde la
 carpeta del repositorio, en bash.

@@ -15,7 +15,7 @@ token, a deploy, and an owner.
 3. Put it on the phone (asked silently, stored with `chmod 600`):
 
 ```bash
-tools/set-token.sh
+tools/set-token.sh              # no-root mode: tools/noroot-bot.sh token
 ```
 
 ## 2. Optional: uploads up to 2 GB
@@ -33,6 +33,7 @@ Without it everything works, but files over 50 MB fail (the bot tries lower reso
 ```bash
 tools/deploy.sh          # copies bot/, plugins and phone scripts; checks syntax on the phone
 tools/enable-bot.sh      # creates /data/debian/BOT_ENABLED and starts bot.sh
+# no-root mode:  tools/noroot-deploy.sh  and  tools/noroot-bot.sh enable
 ```
 
 The bot **only runs where `BOT_ENABLED` exists.** That file is a safety latch: the same token
@@ -51,7 +52,8 @@ Then:
 |---|---|
 | use it in a group | add the bot to the group **as the owner** (anyone else's attempt makes it leave). Make it an admin with *delete messages* so it can remove the link message |
 | let a friend use it privately | they message the bot; you get a request with their id; send `/permitir ID` (`/quitar ID`, `/usuarios`) |
-| follow a YouTube channel | `/seguir <channel link>`; new videos are posted in 1080p (`/canales`, `/dejar N`) |
+| follow a YouTube channel | `/seguir <channel link> [privado\|canal\|ambos]`; new videos are posted in 1080p, no Shorts, checked every 5 min (`/canales`, `/destino N …`, `/dejar N`) |
+| post them to a Telegram **channel** | create a channel, add the bot as administrator with only *Post messages* (turn off *Sign messages* so its name does not appear) — the bot detects it by itself and tells you; `/canal` lists and assigns channels. If posting to the channel fails, the video is left in your private chat with a warning |
 
 ## 5. Using it
 
@@ -66,7 +68,8 @@ Just send a link. Commands:
 | `/estado` `/velocidad` `/acerca` `/help` | all | status, speed test, about, help |
 | `/cookies` (+ send a `.txt`) | owner | status/renew cookies for Instagram and Facebook |
 | `/actualizar` | owner | update yt-dlp and gallery-dl now (also automatic every 24 h) |
-| `/seguir` `/canales` `/dejar` | owner | YouTube channels |
+| `/seguir` `/canales` `/destino` `/dejar` | owner | YouTube channels and where each one is posted (private chat, channel, or both) |
+| `/canal` | owner | Telegram channels the bot posts to, and what each is for (`/canal videos N`, `/canal quitar N`; plugins add more uses) |
 | `/permitir` `/quitar` `/usuarios` | owner | who may use it in private |
 | `/salud` `/historial [N]` `/bateria` | owner | health checks, event log, battery detail and power cuts |
 | `/reiniciar confirmar` · `adb` · `wifi` | owner | reboot the phone · restart only adb · reconnect Wi-Fi |
@@ -81,6 +84,13 @@ These sites demand a logged-in session. Use a **secondary account**, never your 
 3. Send the file to the bot **in private**. It stores it (`chmod 600`) and **deletes your message**.
 
 The bot tells you when they expire or the site blocks them, and `/salud` shows the expiry date.
+
+**How the bot gets a link** (so you can predict failures): Instagram and Facebook are tried **first without
+a session** (yt-dlp, then the page's own embed, then gallery-dl) and the cookies are used only if that fails —
+a public post never touches your account. Footers are cleaned: the link under a video has no trackers
+(`?si=`, `igsh`, `fbclid`, `img_index`…), YouTube links are canonical, and the cache treats the same post
+with different trackers as one. Each job gets its own work folder, so two downloads can never overwrite
+each other.
 
 ### Voice notes → text (optional)
 

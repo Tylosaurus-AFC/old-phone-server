@@ -22,6 +22,11 @@ not authorised, and leaves groups it is added to by anyone other than the owner.
 **Cookies.** Use a secondary account, never your main one. A cookies file is a logged-in
 session. The bot deletes your upload message after saving it and keeps the file mode 600.
 
+**Shizuku and wireless debugging (no-root mode).** Shizuku gives Termux the powers of Android's `shell` user (read
+system state, `svc`, reboot, install/uninstall apps): authorise **only Termux**, and treat anyone with an SSH key to
+your Termux as having those powers. Keep SSH key-only (`PasswordAuthentication no`) and on your LAN. Wireless
+debugging is a second door: pair only PCs you control and never forward its port.
+
 **Network exposure.** Nothing needs an inbound port. Keep adb (:5555) on your LAN, protected by its RSA
 key. Do not forward it from your router.
 
@@ -39,12 +44,12 @@ key. Do not forward it from your router.
 ## FAQ
 
 **Does it work without root?**
-Not this project: the chroot needs root. For no-root phones see the table in
-[00 · Overview](00-overview.md) (Termux/proot-based projects).
+Yes, on modern phones: [12 · No-root mode](12-no-root.md) (Termux + proot + Shizuku), tested end to end on a Realme 12+.
+You lose charger control and support for phones older than ~Android 11. Root mode remains the choice for the oldest phones.
 
-**Why a chroot instead of Termux + proot?**
-Native speed (proot translates every system call), a full Debian (apt, compilers, ffmpeg)
-and it runs on Android versions modern Termux no longer supports. The price is root.
+**Why offer a chroot at all, if proot works without root?**
+Native speed (proot translates every system call), direct control of the charger and Wi-Fi, and it runs on Android
+versions that modern Termux and Shizuku no longer support. On a modern phone, no-root mode is simpler and almost as fast.
 
 **What about iPhones?**
 No. iOS cannot run this.

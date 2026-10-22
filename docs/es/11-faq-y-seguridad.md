@@ -22,6 +22,11 @@ que no esté autorizado, y se va de los grupos a los que lo añada alguien que n
 **Cookies.** Usa una cuenta secundaria, nunca la principal. Un archivo de cookies es una sesión
 iniciada. El bot borra tu mensaje de subida tras guardarlo y deja el archivo en modo 600.
 
+**Shizuku y depuración inalámbrica (modo sin root).** Shizuku da a Termux los poderes del usuario `shell` de Android (leer
+el estado del sistema, `svc`, reiniciar, instalar/desinstalar apps): autoriza **solo a Termux**, y trata a cualquiera con
+una clave SSH a tu Termux como si tuviera esos poderes. Mantén SSH solo con clave (`PasswordAuthentication no`) y en tu
+red local. La depuración inalámbrica es una segunda puerta: empareja solo PCs que controles y nunca redirijas su puerto.
+
 **Exposición de red.** Nada necesita un puerto de entrada. Mantén adb (:5555) en tu red local,
 protegido por su clave RSA. No lo redirijas desde el router.
 
@@ -39,12 +44,14 @@ protegido por su clave RSA. No lo redirijas desde el router.
 ## Preguntas frecuentes
 
 **¿Funciona sin root?**
-Este proyecto no: el chroot necesita root. Para móviles sin root mira la tabla de
-[00 · Resumen](00-resumen.md) (proyectos basados en Termux/proot).
+Sí, en móviles modernos: [12 · Modo sin root](12-modo-sin-root.md) (Termux + proot + Shizuku), probado de punta a punta
+en un Realme 12+. Pierdes el control del cargador y el soporte para móviles anteriores a ~Android 11. El modo root sigue
+siendo la opción para los más viejos.
 
-**¿Por qué un chroot en vez de Termux + proot?**
-Velocidad nativa (proot traduce cada llamada al sistema), un Debian completo (apt, compiladores,
-ffmpeg) y funciona en versiones de Android que el Termux actual ya no soporta. El precio es el root.
+**¿Por qué ofrecer un chroot si proot funciona sin root?**
+Velocidad nativa (proot traduce cada llamada al sistema), control directo del cargador y del Wi-Fi, y funciona en versiones
+de Android que el Termux y el Shizuku actuales ya no soportan. En un móvil moderno, el modo sin root es más simple y casi
+igual de rápido.
 
 **¿Y los iPhone?**
 No. iOS no puede correr esto.

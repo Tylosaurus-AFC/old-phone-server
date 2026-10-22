@@ -77,4 +77,13 @@ A server needs none of the preinstalled apps. Disabling them frees 300–500 MB 
 candidates and the packages you must never disable (notably `com.android.permissioncontroller`:
 disabling it made `system_server` crash-loop at boot on the Moto X2).
 
-Next: [03 · Install](03-install.md).
+## If you cannot root
+
+Plenty of phones cannot be rooted: carrier-locked bootloaders with no public exploit, vendors that no
+longer unlock (the Realme 12+ used for the no-root mode has a locked bootloader and Realme offers no
+"Deep Testing" unlock app for it; the root attempt failed). **That is not the end of the road:**
+[12 · No-root mode](12-no-root.md) runs the same Debian and bot in Termux, using Shizuku for the few system
+powers needed. You lose charger control (the maker's own limiter does that job) and the support for
+Android older than ~11, and keep everything else.
+
+Next: [03 · Install](03-install.md) (root mode), or [12 · No-root mode](12-no-root.md).

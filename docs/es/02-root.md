@@ -77,4 +77,13 @@ RAM (medido: 698 MB → 1050 MB disponibles en la tablet) y estabiliza los tiemp
 candidatos seguros y los paquetes que jamás debes desactivar (sobre todo
 `com.android.permissioncontroller`: al desactivarlo, `system_server` se cayó en bucle al arrancar en el Moto X2).
 
-Siguiente: [03 · Instalación](03-instalacion.md).
+## Si no puedes rootear
+
+Muchos móviles no se pueden rootear: bootloaders bloqueados por el operador sin exploit público, fabricantes que ya
+no desbloquean (el Realme 12+ del modo sin root tiene el bootloader bloqueado y Realme no ofrece la app de «Deep
+Testing» para desbloquearlo en ese modelo; el intento de root falló). **No es el fin del camino:**
+[12 · Modo sin root](12-modo-sin-root.md) corre el mismo Debian y bot en Termux, usando Shizuku para los pocos
+poderes de sistema que hacen falta. Pierdes el control del cargador (lo hace el limitador del fabricante) y el soporte
+para Android anterior a ~11, y conservas todo lo demás.
+
+Siguiente: [03 · Instalación](03-instalacion.md) (modo root), o [12 · Modo sin root](12-modo-sin-root.md).

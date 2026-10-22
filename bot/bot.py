@@ -3,11 +3,12 @@
 video/fotos, los publica en el mismo chat con el titulo enlazado al original
 y borra el mensaje que traia el enlace.
 
-Corre dentro del chroot Debian de un movil Android viejo (ver docs/).
+Corre dentro de un Debian en un movil Android viejo (chroot con root, o proot sin
+root; ver docs/).
   /opt/bot/token   -> token de @BotFather
   /opt/bot/owners  -> 1a linea: ID del dueño; resto: chats/grupos autorizados
 
-Las funciones extra (camaras, Alexa, scrobbler, stickers...) son plugins opcionales:
+Las funciones extra (camaras, Alexa, scrobbler, stickers, likes...) son plugins opcionales:
 cada .py que se copie a /opt/bot/plugins/ se carga al arrancar (ver extras/ y
 docs/*/09-plugins.md).
 """
@@ -67,7 +68,10 @@ BOT = {}
 STARTED = time.time()
 VERSION = (BASE / "VERSION").read_text().strip() if (BASE / "VERSION").exists() else "?"
 # Textos del equipo (/estado, /bateria, /acerca). Se personalizan con
-# /opt/bot/device.json (ver phone/device.example.json).
+# /opt/bot/device.json (ver phone/device.example.json). Claves opcionales: "root" (texto
+# tras la version de Android), "remote" (como se entra: "adb en :5555", "SSH en :8022"...),
+# "wifi_note" (false: no mostrar el aviso del Wi-Fi viejo en /velocidad) y "charge_note"
+# (texto de /bateria; {range} = rango de carga).
 DEVICE = {"name": "Móvil Android",
           "intro": "Un móvil Android viejo reconvertido en servidor",
           "cpu": "CPU del móvil", "android": "Android",
@@ -82,7 +86,7 @@ LAST_OK = {}        # "download": (epoch, red) del ultimo enlace que salio bien
 # ---------------------------------------------------------------- Plugins
 
 # Un plugin es un .py en /opt/bot/plugins/ con una funcion setup(api), donde `api` es
-# este modulo (say, edit, delete, tg, send_file, publish, alert, JOBS, BASE, log...).
+# este modulo (say, edit, delete, tg, send_file, publish, alert, jobs, JOBS, BASE, log...).
 # setup() devuelve un diccionario con lo que aporta (todo opcional):
 #   "commands": {"nombre": {"fn": f(msg, chat, user, arg), "help": "texto HTML",
 #                           "menu": "descripcion corta", "owner": True,
@@ -90,15 +94,21 @@ LAST_OK = {}        # "download": (epoch, red) del ultimo enlace que salio bien
 #   "health":   [f() -> linea de /salud]          (usa api._check)
 #   "loops":    [f()]                              (cada una en su hilo)
 #   "documents": [f(msg, doc, text) -> True si lo atendio]   (.txt que manda el dueño)
+#   "job_done": [f(job, ok, error)]                (al acabar cada trabajo con job["bulk"])
+#   "channel_roles": {"canciones": "descripcion del uso"}   (usos de canales de Telegram)
 #   "about":    ["linea de /acerca", ...]          (solo se muestran al dueño)
 PLUGIN_COMMANDS = {}   # "/nombre" -> opciones
-PLUGIN_HEALTH, PLUGIN_LOOPS, PLUGIN_DOCS, PLUGIN_ABOUT = [], [], [], []
+PLUGIN_HEALTH, PLUGIN_LOOPS, PLUGIN_DOCS, PLUGIN_ABOUT, PLUGIN_JOB_DONE = [], [], [], [], []
 PLUGINS_DIR = BASE / "plugins"
 
 
 def load_plugins():
-    for coll in (PLUGIN_COMMANDS, PLUGIN_HEALTH, PLUGIN_LOOPS, PLUGIN_DOCS, PLUGIN_ABOUT):
-        coll.clear()          # so it can be called again (tests, future /recargar)
+    for coll in (PLUGIN_COMMANDS, PLUGIN_HEALTH, PLUGIN_LOOPS, PLUGIN_DOCS, PLUGIN_ABOUT,
+                 PLUGIN_JOB_DONE):
+        coll.clear()          # asi se puede llamar otra vez (pruebas)
+    for role in list(ROLE_INFO):
+        if role != "videos":
+            ROLE_INFO.pop(role)
     for f in sorted(PLUGINS_DIR.glob("*.py")):
         if f.name.startswith("_"):
             continue
@@ -118,6 +128,8 @@ def load_plugins():
         PLUGIN_LOOPS.extend(info.get("loops", []))
         PLUGIN_DOCS.extend(info.get("documents", []))
         PLUGIN_ABOUT.extend(info.get("about", []))
+        PLUGIN_JOB_DONE.extend(info.get("job_done", []))
+        ROLE_INFO.update(info.get("channel_roles", {}))
         log.info("plugin cargado: %s (%s)", f.name,
                  ", ".join("/" + c for c in info.get("commands", {})) or "sin comandos")
 
@@ -172,6 +184,8 @@ def say(chat, text, reply_to=None, parse_mode=None):
 
 
 def edit(chat, msg_id, text, parse_mode=None):
+    if not msg_id:
+        return
     try:
         tg("editMessageText", chat_id=chat, message_id=msg_id, text=text,
            **({"parse_mode": parse_mode} if parse_mode else {}))
@@ -224,12 +238,23 @@ def reply_args(reply_to):
 
 
 def send_file(chat, path: Path, caption=None, extra=None, reply_to=None, as_doc=False):
+    for attempt in range(4):
+        try:
+            return _send_file(chat, path, caption, extra, reply_to, as_doc)
+        except TelegramError as e:
+            if e.code != 429 or not e.retry_after or e.retry_after > 90 or attempt == 3:
+                raise
+            log.info("sendFile: Telegram pide esperar %s s", e.retry_after)
+            time.sleep(e.retry_after + 1)
+
+
+def _send_file(chat, path: Path, caption=None, extra=None, reply_to=None, as_doc=False):
     k = "document" if as_doc else kind(path)
     params = {"chat_id": chat, **(extra or {}), **reply_args(reply_to)}
     if caption:
         params.update(caption=caption, parse_mode="HTML")
     files = {}
-    cover = thumbs.make(path) if k == "video" else None
+    cover = thumbs.make(path) if k == "video" else         thumbs.audio_cover(path) if k == "audio" else None
     if k == "video":
         params["supports_streaming"] = "true"
     if cover:
@@ -241,6 +266,8 @@ def send_file(chat, path: Path, caption=None, extra=None, reply_to=None, as_doc=
             msg = tg(f"send{k.capitalize()}", _timeout=600,
                      files={k: (path.name, fh, mime(path)), **files}, **params)
         except RuntimeError as e:
+            if isinstance(e, TelegramError) and e.code == 429:
+                raise
             # p.ej. una foto con dimensiones raras: se manda como documento
             log.info("reintento como documento: %s", e)
             fh.seek(0)
@@ -291,7 +318,8 @@ def size_limit():
     return bigupload.MAX_BYTES if bigupload.available() else MAX_BYTES
 
 
-def publish(chat, files, caption, status=None, extra=None, reply_to=None, as_doc=False):
+def publish(chat, files, caption, status=None, extra=None, reply_to=None, as_doc=False,
+            status_chat=None):
     """Envia los archivos y devuelve lo enviado para la cache:
     [("photo"|"video"|..., file_id)] o [("copy", chat, message_id)] si fue por MTProto.
     Si reply_to, el primer envio responde a ese mensaje. Con as_doc todo va como
@@ -313,7 +341,8 @@ def publish(chat, files, caption, status=None, extra=None, reply_to=None, as_doc
         first = not small and n == 0
         mb = f.stat().st_size / 2**20
         mid = bigupload.send(chat, f, caption if first else None,
-                             progress=lambda p: edit(chat, status, f"📤 Subiendo {mb:.0f} MB… {p}%"),
+                             progress=lambda p: edit(status_chat or chat, status,
+                                                     f"📤 Subiendo {mb:.0f} MB… {p}%"),
                              reply_to=reply_to if first else None, as_doc=as_doc)
         sent.append(("copy", chat, mid))
     return [s for s in sent if s]
@@ -344,10 +373,13 @@ def send_cached(chat, items, caption, reply_to=None):
 # ---------------------------------------------------------------- Cache de enlaces
 
 CACHE_FILE = BASE / "cache.json"
-CACHE_MAX = 1000
+CACHE_MAX = 3000
 cache_lock = threading.Lock()
 TRACKING = re.compile(r"^(utm_\w+|si|igsh|igshid|feature|xmt|fbclid|mibextid|ref|ref_src|"
-                      r"s|t|share_id|rdt|_r|is_from_webapp|sender_device|img_index|vrfl)$")
+                      r"s|t|share_id|rdt|_r|is_from_webapp|sender_device|img_index|vrfl|psln|igsh\w*|"
+                      r"story_media_id|hl|ssr|__a|__d)$")
+# Redes donde el enlace de una publicacion nunca necesita parametros: se quitan todos
+NO_QUERY_HOSTS = ("instagram.com", "tiktok.com", "threads.com", "threads.net")
 
 
 def cache_key(url, mode):
@@ -356,6 +388,8 @@ def cache_key(url, mode):
     u = urlsplit(url.strip())
     host = re.sub(r"^(www\.|m\.|mobile\.)", "", u.netloc.lower())
     q = dict(parse_qsl(u.query))
+    if host.endswith(NO_QUERY_HOSTS):
+        q = {}
     yt = None
     if host == "youtu.be":
         yt = u.path.strip("/")
@@ -583,7 +617,7 @@ def keep_cookies(d: Path):
         part.replace(COOKIES)
 
 
-def try_ytdlp(url, d: Path, heights=(720, 480, 360)):
+def try_ytdlp(url, d: Path, heights=(720, 480, 360), cookies=True):
     # De mejor a peor calidad. A igual resolucion, H.264/MP4 primero para que Telegram
     # lo reproduzca dentro del chat (la resolucion manda sobre el codec).
     limit = size_limit()
@@ -596,11 +630,12 @@ def try_ytdlp(url, d: Path, heights=(720, 480, 360)):
             "-S", f"res:{height},vcodec:h264,acodec:m4a",
             "--merge-output-format", "mp4",
             "--max-filesize", str(int(limit * 1.5)),
-            *cookie_args(d),
+            *(cookie_args(d) if cookies else []),
             "-o", "%(id)s.%(ext)s", url,
         ], d, timeout=3600)
-        keep_cookies(d)
-        check_auth(url, p)
+        if cookies:
+            keep_cookies(d)
+            check_auth(url, p)
         if p.returncode:
             return None
         files = media_files(d)
@@ -688,12 +723,13 @@ def try_threads(url, d: Path):
     return files or None
 
 
-def try_gallerydl(url, d: Path):
+def try_gallerydl(url, d: Path, cookies=True):
     clear(d)
     p = run([VENV_BIN / "gallery-dl", "--write-metadata", "--range", f"1-{MAX_FILES}",
-             *cookie_args(d), "-D", ".", url], d)
-    keep_cookies(d)
-    check_auth(url, p)
+             *(cookie_args(d) if cookies else []), "-D", ".", url], d)
+    if cookies:
+        keep_cookies(d)
+        check_auth(url, p)
     files = media_files(d)
     return files if p.returncode in (0, 4) and files else None
 
@@ -747,6 +783,53 @@ def try_audio(url, d: Path):
     return files if p.returncode == 0 and files else None
 
 
+def song_cover(song: Path, info: dict):
+    """Portada cuadrada para la cancion. Los temas de catalogo (los que traen album) tienen
+    la tapa del disco cuadrada y centrada en una imagen 16:9 con barras de color a los
+    lados: se recorta al cuadrado central. Los videos subidos por usuarios se dejan enteros.
+    Se incrusta en el m4a sin tocar el audio."""
+    vid = info.get("id") or song.stem
+    raw = song.with_suffix(".cover.jpg")
+    for name in ("maxresdefault", "hq720", "sddefault", "hqdefault"):
+        r = http.get(f"https://i.ytimg.com/vi/{vid}/{name}.jpg", timeout=30)
+        if r.status_code == 200 and len(r.content) > 5000:
+            raw.write_bytes(r.content)
+            break
+    else:
+        return
+    vf = ["-vf", "crop='min(iw,ih)':'min(iw,ih)'"] if info.get("album") else []
+    out = song.with_suffix(".tmp.m4a")
+    q = run(["ffmpeg", "-loglevel", "error", "-y", "-i", song, "-i", raw, "-map", "0:a",
+             "-map", "1:v", "-c:a", "copy", "-c:v", "mjpeg", *vf, "-q:v", "2",
+             "-disposition:v:0", "attached_pic", "-movflags", "+faststart", out], song.parent)
+    raw.unlink(missing_ok=True)
+    if q.returncode == 0 and out.exists() and out.stat().st_size > song.stat().st_size:
+        out.replace(song)
+    else:
+        out.unlink(missing_ok=True)
+
+
+def try_song(url, d: Path):
+    """Like de YouTube Music: el mejor audio disponible (AAC ~130 kbps, o Opus pasado a
+    m4a si no hay AAC) con portada cuadrada y etiquetas. Sin recodificar a MP3."""
+    clear(d)
+    p = run([VENV_BIN / "yt-dlp", "--js-runtimes", "node", "--no-playlist", "--no-progress",
+             "--restrict-filenames", "--write-info-json",
+             "-f", "bestaudio[ext=m4a]/bestaudio", "-x", "--audio-format", "m4a",
+             "--embed-metadata", *cookie_args(d), "-o", "%(id)s.%(ext)s", url], d, timeout=1800)
+    keep_cookies(d)
+    check_auth(url, p)
+    files = [f for f in media_files(d) if f.suffix == ".m4a"]
+    if p.returncode or not files:
+        return None
+    try:
+        info = json.loads(next(d.glob("*.info.json")).read_text())
+        song_cover(files[0], info)
+    except Exception as e:
+        log.info("portada: %s", e)      # sin portada es mejor que sin cancion
+    return files
+
+
 def audio_tags(d: Path):
     for j in d.glob("*.info.json"):
         try:
@@ -779,7 +862,33 @@ def try_direct(url, d: Path):
     return [out]
 
 
+def clean_url(url):
+    """Enlace del pie sin rastreadores (?si=, igsh, fbclid…, que dicen quien lo compartio).
+    YouTube se deja en su forma canonica; de lo demas solo se quitan los rastreadores."""
+    from urllib.parse import parse_qsl, urlencode, urlsplit
+    try:
+        u = urlsplit(url.strip())
+        host = u.netloc.lower()
+        q = dict(parse_qsl(u.query))
+        vid = None
+        if host in ("youtu.be", "www.youtu.be"):
+            vid = u.path.strip("/")
+        elif host.endswith("youtube.com") and not host.startswith("music."):
+            m = re.match(r"/(shorts|live|embed)/([\w-]+)", u.path)
+            if m and m.group(1) == "shorts":
+                return f"https://www.youtube.com/shorts/{m.group(2)}"
+            vid = q.get("v") or (m.group(2) if m else None)
+        if vid:
+            t = q.get("t") or q.get("start")       # el minuto del vídeo sí es útil
+            return f"https://www.youtube.com/watch?v={vid}" + (f"&t={t}" if t else "")
+        keep = {} if host.lstrip("w.").endswith(NO_QUERY_HOSTS) else             {k: v for k, v in q.items() if not TRACKING.match(k)}
+        return u._replace(query=urlencode(keep), fragment="").geturl()
+    except ValueError:
+        return url
+
+
 def build_caption(title, url, sender):
+    url = clean_url(url)
     title = " ".join((title or "").split()) or "Ver original"
     if len(title) > 200:
         title = title[:197].rstrip() + "…"
@@ -794,6 +903,8 @@ DEFAULT_HEIGHTS = (1080, 720, 480, 360)   # 1080p; si pasa de 2 GB, 720p y asi
 
 def handle(job):
     chat, msg_id, url = job["chat"], job["msg_id"], job["url"]
+    _tl.ok = False                              # el worker lo lee (colas masivas de plugins)
+    targets = job.get("targets") or [chat]     # donde se publica; `chat` lleva el aviso
     mode = job.get("mode", "video")
     key = cache_key(url, mode)
 
@@ -801,9 +912,12 @@ def handle(job):
     hit = cache_get(key)
     if hit:
         try:
-            send_cached(chat, hit["items"], build_caption(hit["title"], url, job["sender"]),
-                        job.get("reply_to"))
+            for t in targets:
+                send_cached(t, hit["items"],
+                            "" if mode == "song" else build_caption(hit["title"], url, job["sender"]),
+                            job.get("reply_to") if t == chat else None)
             log.info("cache %s", key)
+            _tl.ok = True
             bump("links")
             if job["only_link"]:
                 delete(chat, msg_id)
@@ -813,11 +927,21 @@ def handle(job):
             cache_drop(key)
 
     # 2) Descargar
-    status = say(chat, "🎵 Sacando el audio…" if mode == "mp3" else "⏳ Descargando…",
-                 reply_to=msg_id)
+    quiet = job.get("quiet")      # trabajos automaticos: al privado solo si algo falla
+    status = None if quiet else say(
+        chat, "🎵 Sacando el audio…" if mode in ("mp3", "song") else "⏳ Descargando…",
+        reply_to=msg_id)
+
+    def note(text):
+        if job.get("bulk"):
+            return                    # la cola masiva avisa una sola vez, al terminar
+        if status:
+            edit(chat, status, text)
+        else:
+            say(chat, f"{url}\n{text}")
     if "_id" in job:
         jobs.update(job, _status=status)    # para borrarlo si el bot se reinicia a medias
-    d = JOBS / f"{abs(chat)}_{msg_id}_{abs(hash(url)) % 10000}"
+    d = JOBS / f"{abs(chat)}_{msg_id}_{job.get('_id') or abs(hash(url)) % 10000}"
     shutil.rmtree(d, ignore_errors=True)
     d.mkdir(parents=True)
     t0 = time.time()
@@ -827,12 +951,20 @@ def handle(job):
         if mode == "mp3":
             files = try_audio(url, d)
             extra = audio_tags(d)
+        elif mode == "song":
+            files = try_song(url, d)
+            extra = audio_tags(d)
         else:
             heights = job.get("heights", DEFAULT_HEIGHTS)
             ytdlp = lambda u, dd: try_ytdlp(u, dd, heights)
-            for name, fn in (("threads", try_threads), ("yt-dlp", ytdlp),
-                             ("gallery-dl", try_gallerydl), ("instagram", try_instagram),
-                             ("directo", try_direct)):
+            steps = [("threads", try_threads)]
+            if site_of(url) in ("instagram", "facebook"):
+                # Primero lo publico, sin sesion; las cookies solo si no hay otra forma
+                steps += [("yt-dlp público", lambda u, dd: try_ytdlp(u, dd, heights, False)),
+                          ("instagram público", try_instagram),
+                          ("gallery-dl público", lambda u, dd: try_gallerydl(u, dd, False))]
+            steps += [("yt-dlp", ytdlp), ("gallery-dl", try_gallerydl), ("directo", try_direct)]
+            for name, fn in steps:
                 try:
                     files = fn(url, d)
                 except Exception as e:
@@ -843,19 +975,36 @@ def handle(job):
                     break
         if not files:
             record_failure(url)
-            edit(chat, status, "❌ No he podido sacar nada de ese enlace.\n"
-                               "Puede ser privado, necesitar sesión o no estar soportado.")
+            note("❌ No he podido sacar nada de ese enlace.\n"
+                 "Puede ser privado, necesitar sesión o no estar soportado.")
             return
         limit = size_limit()
         ok = [f for f in files if f.stat().st_size <= limit][:MAX_FILES]
         if not ok:
-            edit(chat, status, f"❌ El archivo pasa de {limit // 2**20} MB "
-                               "(límite de Telegram para bots).")
+            note(f"❌ El archivo pasa de {limit // 2**20} MB (límite de Telegram para bots).")
             return
         edit(chat, status, f"📤 Enviando {len(ok)} archivo(s)…")
         title = meta_title(d) or page_title(url)
-        sent = publish(chat, ok, build_caption(title, url, job["sender"]), status, extra,
-                       job.get("reply_to"), as_doc=(mode == "file"))
+        cap = "" if mode == "song" else build_caption(title, url, job["sender"])
+        try:
+            sent = publish(targets[0], ok, cap, status, extra,
+                           job.get("reply_to") if targets[0] == chat else None,
+                           as_doc=(mode == "file"), status_chat=chat)
+        except Exception as e:
+            if targets[0] == chat or job.get("bulk"):
+                raise
+            # No llego al canal: avisar y dejar el video en el privado para no perderlo
+            log.warning("publicar en %s: %s", targets[0], e)
+            say(chat, f"⚠️ No pude publicar en el canal ({str(e).replace(TOKEN, '…')[:200]}). "
+                      "Te lo dejo aquí:")
+            targets = [chat]
+            sent = publish(chat, ok, cap, status, extra, None, as_doc=(mode == "file"))
+        for t in targets[1:]:          # el resto de destinos: reenviar lo ya subido
+            try:
+                send_cached(t, sent, cap)
+            except Exception as e:
+                log.warning("destino %s: %s", t, e)
+                say(chat, f"⚠️ No pude publicar en {t}: {str(e).replace(TOKEN, '…')}")
         if sent:
             # Guardar tambien con la URL canonica (p.ej. el enlace corto de TikTok)
             keys = {key}
@@ -868,6 +1017,7 @@ def handle(job):
                     keys.add(cache_key(canon, mode))
             cache_put(sorted(keys), sent, title)
         log.info("ok %s en %.0fs", url, time.time() - t0)
+        _tl.ok = True
         LAST_OK["download"] = (time.time(), site_of(url))
         bump("links")
         delete(chat, status)
@@ -877,7 +1027,7 @@ def handle(job):
         log.exception("handle")
         _tl.last_err = str(e)[:300]
         record_failure(url)
-        edit(chat, status, f"❌ Error: {e}")
+        note(f"❌ Error: {e}")
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
@@ -892,12 +1042,18 @@ def worker():
             handle(job)
         finally:
             jobs.done(job)
+            if job.get("bulk"):
+                for hook in PLUGIN_JOB_DONE:
+                    try:
+                        hook(job, getattr(_tl, "ok", False), getattr(_tl, "last_err", ""))
+                    except Exception:
+                        log.exception("job_done")
 
 
 # ---------------------------------------------------------------- Canales de YouTube
 
 SUBS_FILE = BASE / "subs.json"
-SUBS_EVERY = 20 * 60
+SUBS_EVERY = 5 * 60
 subs_lock = threading.Lock()
 YT_NS = {"a": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015",
          "media": "http://search.yahoo.com/mrss/"}
@@ -918,8 +1074,13 @@ def save_subs(subs):
 
 def rss_entries(channel_id):
     """[(video_id, titulo, es_short)] del feed RSS del canal (los ~15 ultimos)."""
-    r = http.get("https://www.youtube.com/feeds/videos.xml",
-                 params={"channel_id": channel_id}, timeout=30)
+    # El RSS de YouTube falla a rachas (404/500 con el canal intacto): reintentar
+    for attempt in range(3):
+        r = http.get("https://www.youtube.com/feeds/videos.xml",
+                     params={"channel_id": channel_id}, timeout=30)
+        if r.status_code < 400 or attempt == 2:
+            break
+        time.sleep(5 * (attempt + 1))
     r.raise_for_status()
     out = []
     for e in ET.fromstring(r.content).findall("a:entry", YT_NS):
@@ -930,7 +1091,147 @@ def rss_entries(channel_id):
     return out
 
 
-def follow_channel(url):
+CHANNELS_FILE = BASE / "channels.json"      # canales de Telegram donde publico y su uso
+POSTCH_FILE = BASE / "postchannel.json"     # formato viejo (un solo canal): se migra
+DESTS = {"privado": "👤", "canal": "📢", "ambos": "👤📢"}
+# Usos de un canal de Telegram. "videos": canales de YouTube seguidos. Los plugins
+# anaden los suyos (p. ej. "canciones" el plugin de likes de YouTube Music).
+ROLE_INFO = {"videos": "los vídeos de los canales de YouTube que sigas"}
+
+
+def load_channels():
+    try:
+        return json.loads(CHANNELS_FILE.read_text())
+    except (OSError, ValueError):
+        pass
+    d = {"list": [], "roles": {}}
+    try:
+        old = json.loads(POSTCH_FILE.read_text())
+        d["list"].append(old)
+        d["roles"]["videos"] = old["id"]
+        save_channels(d)
+    except (OSError, ValueError, KeyError):
+        pass
+    return d
+
+
+def save_channels(d):
+    tmp = CHANNELS_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1))
+    tmp.replace(CHANNELS_FILE)
+
+
+def role_channel(role):
+    d = load_channels()
+    return next((c for c in d["list"] if c["id"] == d["roles"].get(role)), None)
+
+
+def post_channel():
+    return role_channel("videos")
+
+
+def sub_targets(dest, owner):
+    """Chats donde publicar los vídeos de un canal seguido. Si el canal de vídeos no
+    está configurado, todo va al privado."""
+    pc = post_channel()
+    priv = dest in (None, "privado", "ambos") or not pc
+    return ([owner] if priv else []) + ([pc["id"]] if pc and dest in ("canal", "ambos") else [])
+
+
+def _norm_title(t):
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFKD", t.lower())
+                   if not unicodedata.combining(c))
+
+
+def channel_event(ev):
+    """my_chat_member: el bot entra a un canal como administrador (o sale de él)."""
+    c, new = ev["chat"], ev["new_chat_member"]
+    if c.get("type") != "channel":
+        return
+    owner, _ = load_owners()
+    d = load_channels()
+    title = c.get("title", "")
+    if new["status"] == "administrator":
+        if ev["from"]["id"] != owner:
+            log.info("me añadieron al canal %s alguien que no es el dueño", c["id"])
+            try:
+                tg("leaveChat", chat_id=c["id"])
+            except Exception:
+                pass
+            return
+        d["list"] = [x for x in d["list"] if x["id"] != c["id"]] + [{"id": c["id"], "title": title}]
+        role = None
+        for r in ROLE_INFO:       # el titulo menciona el uso: «Canciones», «Videos»...
+            if r != "videos" and _norm_title(r)[:6] in _norm_title(title) \
+                    and d["roles"].get(r) != c["id"]:
+                role = r
+        if role is None and not d["roles"].get("videos") and not any(
+                v == c["id"] for v in d["roles"].values()):
+            role = "videos"
+        if role:
+            d["roles"][role] = c["id"]
+        save_channels(d)
+        warn = "" if new.get("can_post_messages", True) else \
+            "\n⚠️ Me falta el permiso «Publicar mensajes»: actívalo en los administradores."
+        uso = ROLE_INFO.get(role) or ("nada todavía: /canal " + "|".join(ROLE_INFO) + " N")
+        say(owner, f"📢 Canal «{title}» conectado. Publicaré ahí: {uso}.{warn}")
+    elif new["status"] in ("left", "kicked") and any(x["id"] == c["id"] for x in d["list"]):
+        d["list"] = [x for x in d["list"] if x["id"] != c["id"]]
+        d["roles"] = {r: v for r, v in d["roles"].items() if v != c["id"]}
+        save_channels(d)
+        say(owner, f"📢 Salí del canal «{title}»; lo que iba ahí vuelve a tu privado.")
+
+
+def channel_command(chat, arg):
+    """/canal: canales de Telegram donde publico. /canal videos N · /canal canciones N ·
+    /canal quitar N · /canal @usuario (conectar uno que no se detectó solo)."""
+    d = load_channels()
+    words = arg.split()
+    ROLES = tuple(ROLE_INFO)
+    uso = lambda cid: ", ".join(r for r in ROLES if d["roles"].get(r) == cid) or "sin uso"
+    if len(words) == 2 and words[0].lower() in ROLES + ("quitar",) and words[1].isdigit() \
+            and 1 <= int(words[1]) <= len(d["list"]):
+        ch = d["list"][int(words[1]) - 1]
+        if words[0].lower() == "quitar":
+            d["list"].remove(ch)
+            d["roles"] = {r: v for r, v in d["roles"].items() if v != ch["id"]}
+            say(chat, f"📢 «{ch['title']}» desconectado (sigo de administrador ahí hasta que "
+                      "me quites tú).")
+        else:
+            d["roles"][words[0].lower()] = ch["id"]
+            say(chat, f"📢 {words[0].lower()} → «{ch['title']}».")
+        save_channels(d)
+        return
+    if arg and not words[0].lower() in ROLES + ("quitar",):
+        try:
+            info = tg("getChat", chat_id=int(arg) if arg.lstrip("-").isdigit() else arg)
+            me = tg("getChatMember", chat_id=info["id"], user_id=BOT["id"])
+            if info.get("type") != "channel" or me["status"] != "administrator":
+                raise RuntimeError("tiene que ser un canal y yo administrador")
+            if not me.get("can_post_messages", True):
+                raise RuntimeError("me falta el permiso «Publicar mensajes»")
+        except Exception as e:
+            say(chat, f"❌ No pude usar ese canal: {str(e).replace(TOKEN, '…')}")
+            return
+        d["list"] = [x for x in d["list"] if x["id"] != info["id"]] + \
+            [{"id": info["id"], "title": info.get("title", "")}]
+        save_channels(d)
+        say(chat, f"📢 Canal «{info.get('title', '')}» conectado. Dime su uso con "
+                  "/canal " + "|".join(ROLES) + " N.")
+        return
+    if not d["list"]:
+        say(chat, "📢 Sin canales de publicación.\n\nCrea un canal, añádeme como administrador "
+                  "(solo con «Publicar mensajes»; desactiva «Firmar mensajes» para que no "
+                  "salga mi nombre) y lo detecto solo. Si no, /canal @usuario_del_canal")
+        return
+    lines = [f"{i}. «{c['title']}» — {uso(c['id'])}" for i, c in enumerate(d["list"], 1)]
+    say(chat, "📢 Canales donde publico:\n" + "\n".join(lines)
+        + "\n\n" + "\n".join(f"/canal {r} N – {u}" for r, u in ROLE_INFO.items())
+        + "\n/canal quitar N – desconectar")
+
+
+def follow_channel(url, dest="privado"):
     """Resuelve un enlace de canal (@handle, /channel/UC..., video) -> (id, nombre)."""
     if not url.startswith("http"):
         url = "https://www.youtube.com/" + (url if url.startswith("@") else "@" + url)
@@ -946,7 +1247,7 @@ def follow_channel(url):
     seen = [v for v, _, _ in rss_entries(cid)]
     with subs_lock:
         subs = load_subs()
-        subs[cid] = {"name": name, "seen": seen, "pending": {}}
+        subs[cid] = {"name": name, "seen": seen, "pending": {}, "dest": dest}
         save_subs(subs)
     return cid, name, len(seen)
 
@@ -978,13 +1279,14 @@ def check_subs():
                 # estreno/directo aun no disponible: reintentar en la siguiente vuelta
                 tries = ch.setdefault("pending", {}).get(vid, 0) + 1
                 ch["pending"][vid] = tries
-                if tries < 72:                           # ~24 h, luego se descarta
+                if tries < 24 * 3600 // SUBS_EVERY:      # ~24 h, luego se descarta
                     continue
             elif st != "short":
                 log.info("nuevo video de %s: %s", ch["name"], title)
                 jobs.put({"chat": owner, "msg_id": None, "only_link": False,
+                          "targets": sub_targets(ch.get("dest"), owner), "quiet": True,
                           "url": f"https://www.youtube.com/watch?v={vid}",
-                          "sender": ch["name"],
+                          "sender": "",      # sin «vía …»: solo el título enlazado
                           # mismo orden que DEFAULT_HEIGHTS, explicito por claridad
                           "heights": (1080, 720, 480, 360)})
             ch["seen"] = (ch["seen"] + [vid])[-60:]
@@ -996,6 +1298,8 @@ def check_subs():
                 current[cid]["seen"] = subs[cid]["seen"]
                 current[cid]["pending"] = subs[cid].get("pending", {})
         save_subs(current)
+
+
 
 
 def subs_loop():
@@ -1011,13 +1315,19 @@ def subs_loop():
 def subs_command(chat, cmd, arg):
     if cmd == "/seguir":
         if not arg:
-            say(chat, "Uso: /seguir https://www.youtube.com/@canal")
+            say(chat, "Uso: /seguir https://www.youtube.com/@canal [privado|canal|ambos]")
             return
+        words = arg.split()
+        dest = words.pop().lower() if words and words[-1].lower() in DESTS else "privado"
+        arg = " ".join(words)
         say(chat, "🔎 Buscando el canal…")
         try:
-            cid, name, n = follow_channel(arg)
-            say(chat, f"✅ Siguiendo «{name}». Te mandaré sus vídeos nuevos en 1080p "
-                      f"(revisado cada {SUBS_EVERY // 60} min; sin Shorts).")
+            cid, name, n = follow_channel(arg, dest)
+            where = {"privado": "a tu privado", "canal": "al canal", "ambos": "a tu privado y al canal"}[dest]
+            say(chat, f"✅ Siguiendo «{name}». Sus vídeos nuevos irán {where} en 1080p "
+                      f"(revisado cada {SUBS_EVERY // 60} min; sin Shorts)."
+                      + ("" if post_channel() or dest == "privado" else
+                         "\n⚠️ Aún no hay canal conectado (/canal): irán a tu privado."))
         except Exception as e:
             say(chat, f"❌ {e}")
     elif cmd == "/canales":
@@ -1025,8 +1335,27 @@ def subs_command(chat, cmd, arg):
         if not subs:
             say(chat, "No sigues ningún canal. Usa /seguir <enlace del canal>.")
             return
-        lines = [f"{i}. {c['name']}" for i, c in enumerate(subs.values(), 1)]
-        say(chat, "📺 Canales seguidos:\n" + "\n".join(lines) + "\n\n/dejar N – dejar de seguir")
+        lines = [f"{i}. {DESTS.get(c.get('dest'), DESTS['privado'])} {c['name']}"
+                 for i, c in enumerate(subs.values(), 1)]
+        pc = post_channel()
+        say(chat, "📺 Canales seguidos (👤 privado · 📢 canal"
+                  + (f" «{pc['title']}»" if pc else " sin conectar") + "):\n" + "\n".join(lines)
+                  + "\n\n/destino N privado|canal|ambos\n/dejar N – dejar de seguir")
+    elif cmd == "/destino":
+        words = arg.split()
+        with subs_lock:
+            subs = load_subs()
+            keys = list(subs)
+            if len(words) != 2 or not words[0].isdigit() or words[1].lower() not in DESTS \
+                    or not 1 <= int(words[0]) <= len(keys):
+                say(chat, "Uso: /destino N privado|canal|ambos (N = número de /canales)")
+                return
+            subs[keys[int(words[0]) - 1]]["dest"] = words[1].lower()
+            name = subs[keys[int(words[0]) - 1]]["name"]
+            save_subs(subs)
+        say(chat, f"{DESTS[words[1].lower()]} «{name}» → {words[1].lower()}"
+                  + ("" if post_channel() or words[1].lower() == "privado" else
+                     "\n⚠️ Aún no hay canal conectado (/canal): irá a tu privado."))
     elif cmd == "/dejar":
         with subs_lock:
             subs = load_subs()
@@ -1174,7 +1503,7 @@ def status_text():
             f"bot {bot_mb} MB\n"
             f"📊 Carga: {' '.join(load)}\n"
             f"⏱️ Encendido: {up / 3600:.1f} h\n"
-            f"🌐 IP: {ip} ({'Ethernet' if eth_link()[0] else 'Wi-Fi'}; adb en :5555)\n"
+            f"🌐 IP: {ip} ({'Ethernet' if eth_link()[0] else 'Wi-Fi'}; {DEVICE.get('remote', 'adb en :5555')})\n"
             f"⬇️ yt-dlp {ver} · en cola: {jobs.qsize()}")
 
 
@@ -1201,7 +1530,14 @@ def wifi_link():
         out = subprocess.run(["iw", "dev", "wlan0", "link"], capture_output=True,
                              text=True, timeout=10).stdout
     except (OSError, subprocess.TimeoutExpired):
-        return None, None, None
+        out = ""
+    if not out:   # sin root (Realme, proot): lo deja cada minuto charge.sh
+        try:
+            w = json.loads((BASE / "sys" / "wifi.json").read_text())
+            band = ("5 GHz" if w["freq"] > 4000 else "2.4 GHz") if w.get("freq") else None
+            return w.get("rssi"), w.get("link"), band
+        except (OSError, ValueError, KeyError, TypeError):
+            return None, None, None
     sig = re.search(r"signal:\s*(-?\d+)", out)
     rate = re.search(r"tx bitrate:\s*([\d.]+)", out)
     freq = re.search(r"freq:\s*(\d+)", out)
@@ -1289,7 +1625,7 @@ def speedtest(chat, status):
         lines.append(f"🏢 {html.escape(isp)} ({html.escape(meta.get('city') or '?')})"
                      + (f" · servidor Cloudflare {html.escape(meta['colo'])}"
                         if meta.get("colo") else ""))
-    if not eth:
+    if not eth and DEVICE.get("wifi_note", True):
         lines.append("\n<i>Mide hasta lo que da el Wi-Fi de este móvil (antiguo, ~100 Mbps "
                      "reales como mucho): si tu plan es mayor, la red de la casa puede ir "
                      "más rápido que esto.</i>")
@@ -1313,6 +1649,8 @@ def speed_command(chat):
         say(chat, result, parse_mode="HTML")
     finally:
         speed_lock.release()
+
+
 
 
 # ---------------------------------------------------------------- PDF a imagenes
@@ -1436,6 +1774,8 @@ def pdf_command(msg, chat, arg):
         edit(chat, status, f"❌ Error con el PDF: {str(e).replace(TOKEN, '…')}")
     finally:
         shutil.rmtree(d, ignore_errors=True)
+
+
 
 
 # ---------------------------------------------------------------- Notas de voz
@@ -1711,8 +2051,9 @@ def battery_text(arg):
     out = [f"🔋 <b>Batería</b>: {cap}%{gauge} · {html.escape(battery_label())}",
            f"⚡ {num('voltage_now', 1e6, 2)} V · 🌡️ {num('temp', 10, 1)} °C · salud {health_es}",
            f"🔧 {read_sys(f'{BAT}/technology')} {maker}, {DEVICE['battery']}",
-           f"🎚️ Carga entre {read_sys(BASE / 'charge_range')} %; si pasa de 42 °C deja de "
-           "cargar y por debajo del 15 % carga siempre"]
+           "🎚️ " + DEVICE.get("charge_note", "Carga entre {range} %; si pasa de 42 °C deja "
+                              "de cargar y por debajo del 15 % carga siempre")
+           .replace("{range}", read_sys(BASE / "charge_range"))]
     try:
         last = json.loads(POWER_FILE.read_text())
         est = f" · con {cap}% aguantaría ~{capn / last['rate']:.0f} h" \
@@ -1859,8 +2200,12 @@ HELP = ("🤖 <b>Qué hago</b>\n"
         "/velocidad – prueba de velocidad de la red de casa (ping, bajada y subida)\n"
         "/help – esta ayuda")
 OWNER_HELP = ("\n\n👑 <b>Solo tú (por privado)</b>\n"
-              "/seguir <i>canal</i> – recibir en 1080p los vídeos nuevos de un canal de YouTube\n"
-              "/canales – canales que sigues\n"
+              "/seguir <i>canal</i> [<i>privado|canal|ambos</i>] – recibir en 1080p los vídeos "
+              "nuevos de un canal de YouTube (por defecto, a tu privado)\n"
+              "/canales – canales que sigues y a dónde va cada uno\n"
+              "/destino <i>N privado|canal|ambos</i> – cambiar a dónde va un canal seguido\n"
+              "/canal – tus canales de Telegram donde publico (añádeme como administrador; "
+              "<i>/canal videos N</i> · <i>/canal canciones N</i>)\n"
               "/dejar <i>N</i> – dejar de seguir el canal N\n"
               "/permitir <i>ID</i> – dar acceso por privado a alguien\n"
               "/quitar <i>ID</i> – retirar el acceso\n"
@@ -1885,7 +2230,8 @@ PUBLIC_COMMANDS = [("mp3", "Solo el audio de un enlace"),
                    ("help", "Qué hago y comandos")]
 OWNER_COMMANDS = PUBLIC_COMMANDS + [
     ("seguir", "Seguir un canal de YouTube"), ("canales", "Canales seguidos"),
-    ("dejar", "Dejar de seguir un canal"), ("permitir", "Dar acceso a alguien"),
+    ("dejar", "Dejar de seguir un canal"), ("destino", "Privado o canal para un canal seguido"),
+    ("canal", "Canales de Telegram donde publico"), ("permitir", "Dar acceso a alguien"),
     ("quitar", "Retirar acceso"), ("usuarios", "Quién tiene acceso"),
     ("cookies", "Sesiones de Instagram/Facebook"), ("actualizar", "Actualizar descargadores"),
     ("reiniciar", "Reiniciar el móvil o adb"),
@@ -1911,7 +2257,7 @@ def bump(key, n=1):
 
 def about_text(full=False):
     """/acerca: presentacion del servidor para presumir (sin comandos). Lo privado
-    (plugins, version de Android con root) solo se lo ensena al dueño por privado."""
+    (plugins, version de Android) solo se lo ensena al dueño por privado."""
     mem = dict(l.split(":", 1) for l in read_sys("/proc/meminfo", "").splitlines() if ":" in l)
     ram = int(mem.get("MemTotal", "0 kB").split()[0]) / 2**20
     du = shutil.disk_usage("/")
@@ -1932,7 +2278,8 @@ def about_text(full=False):
         "📱 <b>El fierro</b>",
         f"• {DEVICE['cpu']} a {ghz:.1f} GHz · {ram:.1f} GB de RAM · "
         f"{du.total / 2**30:.0f} GB ({du.free / 2**30:.1f} libres)",
-        f"• {DEVICE['android']} con root y, dentro, un Debian {debian} completo con Python" if full
+        f"• {DEVICE['android']} {DEVICE.get('root', 'con root')} y, dentro, un Debian {debian} "
+        "completo con Python" if full
         else f"• Android y, dentro, un Linux Debian {debian} completo",
         f"• Lleva {health.ago(up)} encendido sin parar · batería al "
         f"{read_sys(BAT + '/capacity')}% y a {int(read_sys(BAT + '/temp', '0')) / 10:.0f} °C",
@@ -1999,8 +2346,8 @@ def enqueue(msg, chat, user, urls, rest_text, mode="video"):
                   "reply_to": None if only_link else msg["message_id"]})
 
 
-OWNER_ONLY = {"/seguir", "/canales", "/dejar", "/permitir", "/quitar", "/usuarios",
-              "/cookies", "/actualizar", "/reiniciar", "/transcribir", "/salud",
+OWNER_ONLY = {"/seguir", "/canales", "/dejar", "/destino", "/canal", "/permitir", "/quitar",
+              "/usuarios", "/cookies", "/actualizar", "/reiniciar", "/transcribir", "/salud",
               "/historial", "/bateria", "/batería", "/carga"}
 OWNER_ANYWHERE = {"/actualizar", "/transcribir", "/salud", "/historial",   # tambien en grupos
                   "/bateria", "/batería", "/carga"}
@@ -2115,7 +2462,9 @@ def on_message(msg):
     elif cmd == "/actualizar":
         say(chat, "🔄 Actualizando yt-dlp y gallery-dl…")
         threading.Thread(target=update_tools, args=(chat,), daemon=True).start()
-    elif cmd in ("/seguir", "/canales", "/dejar"):
+    elif cmd == "/canal":
+        channel_command(chat, arg)
+    elif cmd in ("/seguir", "/canales", "/dejar", "/destino"):
         threading.Thread(target=subs_command, args=(chat, cmd, arg), daemon=True).start()
     elif cmd in ("/permitir", "/quitar", "/usuarios"):
         access_command(chat, cmd, arg)
@@ -2173,7 +2522,7 @@ def main():
         try:
             # Durante un corte, peticiones cortas: asi la vuelta se nota al momento
             wait = 1 if outage.since is not None else 50
-            params = {"timeout": wait, "allowed_updates": json.dumps(["message"])}
+            params = {"timeout": wait, "allowed_updates": json.dumps(["message", "my_chat_member"])}
             if offset:
                 params["offset"] = offset
             updates = tg("getUpdates", _timeout=wait + 20, **params)
@@ -2190,6 +2539,11 @@ def main():
                         on_message(upd["message"])
                     except Exception:
                         log.exception("on_message")
+                elif "my_chat_member" in upd:
+                    try:
+                        channel_event(upd["my_chat_member"])
+                    except Exception:
+                        log.exception("channel_event")
         except TelegramError as e:
             # Telegram contestó con un error: NO es un corte de Internet.
             errs += 1

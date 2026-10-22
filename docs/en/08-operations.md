@@ -13,6 +13,23 @@ Day-to-day commands, run from the repository on your PC.
 | Restore the whole Debian (new/damaged phone) | `tools/restore-full.sh backup/image-<date> [--force]` |
 | Look at what is happening | `/salud`, `/historial`, `/bateria`, `/estado` in Telegram |
 
+## No-root mode equivalents
+
+| Root mode | No-root mode |
+|---|---|
+| `tools/deploy.sh` | `tools/noroot-deploy.sh` |
+| `tools/enable-bot.sh [off]` | `tools/noroot-bot.sh enable\|disable` |
+| `tools/set-token.sh`, `tools/set-api.sh` | `tools/noroot-bot.sh token\|api` |
+| `tools/edit-conf.sh` | `ssh phone nano ~/server/server.conf` |
+| `tools/backup.sh` / `restore-config.sh` | `tools/noroot-backup.sh` / `noroot-restore.sh` |
+| `tools/make-image.sh` / `restore-full.sh` | `proot-distro backup bot` / `proot-distro restore` (in Termux) |
+| `adb connect <ip>:5555` | `ssh phone`, and `tools/noroot-adb.sh` for wireless adb |
+
+Backups are interchangeable between modes. **Migrating** (e.g. from a rooted old phone to a no-root modern one):
+make a fresh backup on the old phone while it still runs → switch the bot **off** there → `tools/noroot-restore.sh
+backup/<date>` on the new one (it copies token, API keys, cookies, owners, followed channels, cache, MTProto session,
+likes/Last.fm state… and starts the bot) → check `/estado`, `/salud` and one link.
+
 ## Updating
 
 * **yt-dlp / gallery-dl** update themselves every 24 h and on `/actualizar`. Sites change often;

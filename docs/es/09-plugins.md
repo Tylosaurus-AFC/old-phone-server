@@ -10,7 +10,7 @@ funciones privadas de la instalación original, generalizadas.
 Pon en `config.sh` los que quieras y despliega:
 
 ```bash
-PLUGINS="cameras alexa stickers lastfm_scrobbler"
+PLUGINS="cameras alexa stickers lastfm_scrobbler youtube_music_likes"
 tools/deploy.sh
 ```
 
@@ -22,6 +22,7 @@ nombre empieza por `_`). Un plugin que falla al cargar se anota en el log y se o
 | `cameras` | `/foto_camaras [cam]`, `/clip_camaras cam [fecha] inicio fin` | `camaras.json`: `{"host","user","password"}` | grabadores **Dahua** XVR/NVR (CGI + RTSP). Crea en el grabador un usuario solo de lectura para el bot, nunca el administrador. Otras marcas necesitan adaptar `_camaras.py` |
 | `alexa` | `/alexa [@altavoz] texto` | `voicemonkey.json`: `{"token","device","language"}` | con [Voice Monkey](https://voicemonkey.io) (plan gratis: 200 llamadas/mes) |
 | `stickers` | `/sticker [emoji]` | `ffmpeg` con VP9 | convierte un vídeo/GIF en sticker de vídeo de Telegram en el pack del propio usuario. Abierto a todo usuario autorizado |
+| `youtube_music_likes` | `/likes [pausa\|reanudar\|bajar N\|todos [rehacer]\|parar]` | el plugin `lastfm_scrobbler` instalado con sus cookies de YouTube Music; un canal de Telegram (`/canal`) para las canciones | cada canción a la que das *me gusta* en YouTube Music se baja como m4a con portada cuadrada y etiquetas y se publica en tu canal de canciones (o en tu privado); revisión cada 5 min y una cola masiva regulada para todo tu historial |
 | `lastfm_scrobbler` | `/scrobble`, `/lastfm` | cookies de music.youtube.com (se mandan como `.txt` cuyo nombre contenga `youtube`), clave de API de Last.fm | manda a Last.fm el historial de YouTube Music cada 3 min; el ejemplo más completo (bucle en segundo plano, línea de salud, manejo de archivos) |
 
 Pon el archivo de configuración de cada plugin en `/opt/bot/` del móvil (dentro del chroot:
@@ -33,7 +34,7 @@ Pon el archivo de configuración de cada plugin en `/opt/bot/` del móvil (dentr
 Un plugin es un archivo con una función `setup(api)`. `api` es el propio módulo del bot: puedes usar
 `api.say`, `api.edit`, `api.delete`, `api.tg` (llamada directa a la Bot API), `api.send_file`,
 `api.publish` (maneja álbumes y la vía de 2 GB), `api.alert` (mensaje privado al dueño, con límite
-de frecuencia), `api.JOBS` (carpeta temporal), `api.BASE`, `api.log`, `api.load_owners`, `api.BOT`,
+de frecuencia), `api.jobs` (la cola de descargas: `api.jobs.put({...})`; un trabajo puede llevar `"mode": "song"`, `"targets": [ids de chat]`, `"quiet": true`), `api.cache_get`/`api.cache_key`, `api.role_channel`, `api.JOBS` (carpeta temporal), `api.BASE`, `api.log`, `api.load_owners`, `api.BOT`,
 `api.health.event`, `api._check` (da formato a una línea de `/salud`).
 
 ```python
@@ -61,6 +62,8 @@ def setup(api):
 | `loops` | lista de `f()` | tareas en segundo plano, cada una en su hilo daemon (deben hacer `while True` + `sleep`) |
 | `documents` | lista de `f(msg, doc, texto) → bool` | se llama cuando el dueño manda un `.txt` por privado; devuelve `True` si lo atendiste |
 | `about` | lista de str | viñetas para el `/acerca` del dueño |
+| `job_done` | lista de `f(job, ok, error)` | se llama al terminar un trabajo de la cola que lleve `"bulk": true` (progreso de una cola grande) |
+| `channel_roles` | dict `{uso: descripción}` | añade un uso para canales de Telegram (`/canal <uso> N`); un canal cuyo título mencione el uso se asigna solo. Léelo luego con `api.role_channel(uso)` |
 
 Reglas del juego:
 

@@ -65,3 +65,13 @@ def make(video: Path):
     except Exception as e:
         log.info("miniatura: %s", e)
         return None
+
+
+def audio_cover(audio: Path):
+    """Miniatura para Telegram (sendAudio) a partir de la portada incrustada."""
+    out = audio.with_suffix(".thumb.jpg")
+    try:
+        return _ffmpeg(["-i", str(audio)], out)
+    except Exception as e:
+        log.info("miniatura de audio: %s", e)
+        return None

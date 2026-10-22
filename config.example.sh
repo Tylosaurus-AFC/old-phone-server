@@ -33,6 +33,12 @@ BB_PATH="${BB_PATH:-/data/debian/busybox-deb}"
 # Check with: adb shell getprop ro.product.cpu.abilist
 ARCH="${ARCH:-armhf}"
 
+# ---- NO-ROOT mode (Termux + proot + Shizuku; see docs/*/12-*.md) --------------------
+# ssh host alias of the phone (an entry in ~/.ssh/config: HostName <phone-ip>, Port 8022, key auth)
+NOROOT_SSH="${NOROOT_SSH:-phone}"
+NOROOT_IP="${NOROOT_IP:-192.168.1.50}"     # the phone's Wi-Fi IP (for tools/noroot-adb.sh)
+CONTAINER="${CONTAINER:-bot}"              # proot-distro container name
+
 # Optional plugins to deploy with `tools/deploy.sh` (see extras/plugins/ and docs/*/09-plugins.md).
 # Space separated names of files in extras/plugins/ without .py. Empty = none.
 #   cameras alexa stickers lastfm_scrobbler

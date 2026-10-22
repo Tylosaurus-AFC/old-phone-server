@@ -4,7 +4,7 @@ Thank you for helping old phones get a second life.
 
 ## The most useful contributions
 
-1. **Your phone.** Add a section to [`docs/en/10-tested-devices.md`](docs/en/10-tested-devices.md)
+1. **Your phone** (either mode). Add a section to [`docs/en/10-tested-devices.md`](docs/en/10-tested-devices.md)
    (and `docs/es/10-moviles-probados.md` if you can): model, Android version, ABI, root route,
    `BB_PATH`, `BATT_CTRL`, what you had to change, a few measurements. Failures are valuable too.
 2. **Bug reports.** Say: phone model, Android version, `tools/install.sh check` output, which step
@@ -21,7 +21,7 @@ Thank you for helping old phones get a second life.
 * **Never commit secrets or personal data**: tokens, API keys, cookies, `config.sh`, backups, IP
   addresses of your network, Wi-Fi names, serial numbers. `.gitignore` covers the usual file names, but
   read your diff. If you leak a token, revoke it in @BotFather before anything else.
-* Shell scripts must stay POSIX `sh`-compatible on the phone (Android's `sh` is `mksh`; no bashisms in
-  `phone/*.sh`). Tools for the PC (`tools/*.sh`) are bash. Always LF line endings (`.gitattributes`).
+* Shell scripts must stay POSIX `sh`-compatible on the phone in root mode (Android's `sh` is `mksh`; no bashisms in
+  `phone/*.sh`). Termux scripts (`phone/noroot/`) and the PC tools (`tools/*.sh`) are bash. Always LF line endings (`.gitattributes`).
 * Run `tests/run.sh` before sending a pull request (`pip install requests`). Add a test when you fix a bug.
 * Keep the documentation honest: say what was tested on which hardware and what was not.

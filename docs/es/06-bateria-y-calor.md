@@ -34,6 +34,14 @@ lo nota (dos puntos de bajada en menos de una hora estando «en pausa», o `Disc
 carga) y te avisa, y cuando vuelve la corriente cuenta cuánto aguantó la batería (`/bateria`
 guarda el último corte y estima la autonomía con él).
 
+## ¿Sin root? El limitador del fabricante hace el trabajo
+
+En el [modo sin root](12-modo-sin-root.md) nada puede conmutar el cargador, así que activa el límite propio del móvil
+(Realme: *Batería → Salud de la batería → Límite de carga personalizado*; «Proteger batería» de Samsung; «Limitar al
+80 %» de Pixel; «Protección de batería» de Xiaomi). El vigilante informa «enchufado pero sin cargar» como carga en
+pausa. El Realme corre con límite del 80 %, y seis descargas paralelas de 1080p dejaron su batería a ≤ 27,6 °C. Todo lo
+demás de esta página (inspección, ventilación, calor) vale igual.
+
 ## Encontrar el interruptor de carga de tu móvil
 
 Linux expone el driver del cargador en sysfs. Mira qué tiene el tuyo:

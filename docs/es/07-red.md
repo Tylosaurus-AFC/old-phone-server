@@ -37,6 +37,14 @@ Cosas que conviene saber:
   `ADB_TCP_PROP=persist.adb.tcp.port` (11) o deja el valor por defecto (16) y
   `ADB_RESTART="setprop ctl.restart adbd"`.
 
+## Modo sin root: SSH, y por qué no basta el adb inalámbrico
+
+Sin root, el acceso remoto es **SSH a Termux** (`ssh phone`, puerto 8022, solo clave) en vez de adb en :5555; ver
+[12](12-modo-sin-root.md). La depuración inalámbrica sigue siendo útil desde tu PC, pero Android **la apaga cada vez
+que el móvil salta entre puntos de acceso** (router ↔ repetidor: *«Detected wifi network change. Disabling adbwifi»*) y
+elige un puerto nuevo cada vez. `guard.sh` la vuelve a encender y `tools/noroot-adb.sh` encuentra el puerto. El servicio
+de Shizuku, del que depende el vigilante, sobrevive a esos saltos.
+
 ## Ahorro de energía del Wi-Fi: el móvil «desaparece» de noche
 
 Con la pantalla apagada el chip Wi-Fi entra en ahorro de energía y deja de contestar al tráfico
@@ -83,11 +91,11 @@ Android (~1 min sin red; el chroot y el bot siguen). `2g` lo deshace.
 
 ## Ethernet (hub USB-C o micro-USB)
 
-Preparado pero **todavía sin probar con hardware real**. La mayoría de kernels incluyen los
+Probado una vez, con resultados mixtos (ver [13 · Hubs USB](13-recetas-multimedia.md#hubs-usb-qué-salió-mal)). La mayoría de kernels incluyen los
 drivers USB-Ethernet habituales (Realtek RTL8152/8153, ASIX AX88179, CDC-ECM/NCM) y Android
 nombra la interfaz `eth0` o `usb0`. `charge.sh` nota el cable, lo registra y deja el Wi-Fi en paz mientras
 haya enlace; `/velocidad` del bot informa «Conectado por cable». Ojo: muchos móviles no pueden
 cargar **y** hacer de anfitrión USB por el mismo puerto; puede hacer falta un hub con paso de
-corriente. Compruébalo con tu hub, y cuéntanos cómo te fue.
+corriente. En un hub USB-C real con adaptador Ethernet, un disco y carga a la vez, el hub se cayó dos veces y el Ethernet negoció solo 10 Mbit/s (Android prefirió entonces ese cable lento frente a un Wi-Fi de 180 Mbit/s). Mide `/velocidad` tras enchufar cualquier cosa que se apodere de la ruta por defecto.
 
 Siguiente: [08 · Operación](08-operacion.md).

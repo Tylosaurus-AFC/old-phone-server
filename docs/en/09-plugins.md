@@ -10,7 +10,7 @@ the private features of the original installation, generalised.
 List the ones you want in `config.sh` and deploy:
 
 ```bash
-PLUGINS="cameras alexa stickers lastfm_scrobbler"
+PLUGINS="cameras alexa stickers lastfm_scrobbler youtube_music_likes"
 tools/deploy.sh
 ```
 
@@ -22,6 +22,7 @@ names start with `_`). A plugin that fails to load is logged and skipped; the re
 | `cameras` | `/foto_camaras [cam]`, `/clip_camaras cam [date] start end` | `camaras.json`: `{"host","user","password"}` | **Dahua** XVR/NVR (CGI + RTSP). Create a read-only user for the bot on the recorder, never the admin. Other brands need `_camaras.py` adapted |
 | `alexa` | `/alexa [@speaker] text` | `voicemonkey.json`: `{"token","device","language"}` | via [Voice Monkey](https://voicemonkey.io) (free tier: 200 calls/month) |
 | `stickers` | `/sticker [emoji]` | `ffmpeg` with VP9 | turns a video/GIF into a Telegram video sticker in the user's own pack. Open to every authorised user |
+| `youtube_music_likes` | `/likes [pausa\|reanudar\|bajar N\|todos [rehacer]\|parar]` | the `lastfm_scrobbler` plugin installed with its YouTube Music cookies; a Telegram channel (`/canal`) for the songs | every song you *like* on YouTube Music is downloaded as m4a with a square cover and tags and posted to your songs channel (or your private chat); a 5-minute check, and a throttled bulk queue for your whole history |
 | `lastfm_scrobbler` | `/scrobble`, `/lastfm` | cookies of music.youtube.com (sent as a `.txt` whose name contains `youtube`), Last.fm API key | scrobbles YouTube Music history to Last.fm every 3 min; the most complete example (background loop, health line, file handler) |
 
 Put each plugin's config file in `/opt/bot/` on the phone (inside the chroot:
@@ -33,7 +34,7 @@ Put each plugin's config file in `/opt/bot/` on the phone (inside the chroot:
 A plugin is one file with a `setup(api)` function. `api` is the bot module itself: you can use
 `api.say`, `api.edit`, `api.delete`, `api.tg` (raw Bot API call), `api.send_file`, `api.publish`
 (handles albums and the 2 GB path), `api.alert` (private message to the owner, rate-limited),
-`api.JOBS` (a temp folder), `api.BASE`, `api.log`, `api.load_owners`, `api.BOT`, `api.health.event`,
+`api.jobs` (the download queue: `api.jobs.put({...})`; a job may set `"mode": "song"`, `"targets": [chat ids]`, `"quiet": true`), `api.cache_get`/`api.cache_key`, `api.role_channel`, `api.JOBS` (a temp folder), `api.BASE`, `api.log`, `api.load_owners`, `api.BOT`, `api.health.event`,
 `api._check` (format a `/salud` line).
 
 ```python
@@ -61,6 +62,8 @@ def setup(api):
 | `loops` | list of `f()` | background tasks, each in its own daemon thread (they should `while True` + `sleep`) |
 | `documents` | list of `f(msg, doc, text) → bool` | called when the owner sends a `.txt` in private; return `True` if you took it |
 | `about` | list of str | bullet lines for the owner's `/acerca` |
+| `job_done` | list of `f(job, ok, error)` | called when a queued job that carries `"bulk": true` finishes (progress of a big queue) |
+| `channel_roles` | dict `{role: description}` | adds a use for Telegram channels (`/canal <role> N`); a channel whose title mentions the role is assigned automatically. Read it later with `api.role_channel(role)` |
 
 Rules of the road:
 

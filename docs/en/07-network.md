@@ -35,6 +35,14 @@ Things to know:
   the Android 11 and Android 16 devices tested; there set `ADB_TCP_PROP=persist.adb.tcp.port` (11)
   or keep the default (16) and `ADB_RESTART="setprop ctl.restart adbd"`.
 
+## No-root mode: SSH, and why wireless adb is not enough
+
+Without root, remote access is **SSH into Termux** (`ssh phone`, port 8022, key-only) rather than adb on :5555;
+see [12](12-no-root.md). Wireless debugging is still useful from your PC, but Android **switches it off
+whenever the phone hops between access points** (router ↔ repeater: *"Detected wifi network change. Disabling
+adbwifi"*) and picks a new port each time. `guard.sh` switches it back on and `tools/noroot-adb.sh` finds the
+port. Shizuku's service, which the watchdog depends on, survives those hops.
+
 ## Wi-Fi power-save: the phone "disappears" at night
 
 With the screen off, the Wi-Fi chip goes to power-save and stops answering local-network
@@ -82,11 +90,11 @@ framework (~1 min without network; the chroot and bot keep running). `2g` undoes
 
 ## Ethernet (USB-C or micro-USB hub)
 
-Prepared but **not tested with real hardware yet**. Most kernels include the usual USB
+Tested once, with mixed results (see [13 · USB hubs](13-media-recipes.md#usb-hubs-what-went-wrong)). Most kernels include the usual USB
 Ethernet drivers (Realtek RTL8152/8153, ASIX AX88179, CDC-ECM/NCM) and Android names the
 interface `eth0` or `usb0`. `charge.sh` notices the cable, logs it, and leaves Wi-Fi alone while
 the link is up; the bot's `/velocidad` reports "Conectado por cable". Caveat: many phones
 cannot charge **and** host a USB device through the same port; you may need a hub with
-power pass-through. Check with your actual hub, and tell us how it went.
+power pass-through. On a real USB-C hub with an Ethernet adapter, a disk and charging together, the hub dropped twice and the Ethernet negotiated only 10 Mbit/s (Android then preferred that slow cable over a 180 Mbit/s Wi-Fi). Check `/velocidad` after plugging in anything that takes over the default route.
 
 Next: [08 · Operations](08-operations.md).

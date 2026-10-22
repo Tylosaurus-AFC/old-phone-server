@@ -377,3 +377,14 @@ def status_text():
             lines.append(f"• {time.strftime('%H:%M', time.localtime(r['ts']))} "
                          f"{html.escape(r['title'])} ({html.escape(r['why'])})")
     return "\n".join(lines)
+
+
+def fetch_likes(limit=50):
+    """[{id, title, artist}] de «Canciones que me gustan», de mas nueva a mas vieja."""
+    out = []
+    for t in ytm_client().get_liked_songs(limit=limit).get("tracks", []):
+        if t.get("videoId"):
+            out.append({"id": t["videoId"], "title": t.get("title") or "",
+                        "artist": ", ".join(a["name"] for a in t.get("artists") or []
+                                            if a.get("name"))})
+    return out

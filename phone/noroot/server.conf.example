@@ -1,0 +1,22 @@
+# server.conf -- settings for the no-root scripts (Termux). Installed as ~/server/server.conf.
+# Plain shell (`KEY=value`). charge.sh re-reads it every minute. See docs/*/12-*.md.
+
+# Name of the proot-distro container that holds Debian and the bot.
+CONTAINER=bot
+
+# Phone maker's own charge limiter, whose state charge.sh should read:
+#   oplus   Realme / OPPO / OnePlus ColorOS-OxygenOS: Settings > Battery > Battery health >
+#           Custom charge limit (read from `settings system regular_charge_protection_*`)
+#   (empty) just report "plugged in but not charging" as a paused charge.
+# On any phone, turn on the maker's charge limit by hand (Samsung "Protect battery",
+# Pixel "Adaptive charging"/"Limit to 80%", Xiaomi "Battery protection"...): without root
+# these scripts cannot control the charger themselves.
+OEM=
+CHARGE_LIMIT_DEFAULT=80      # shown when the limit cannot be read
+
+# Extras that need an external USB disk (see phone/noroot/extras/ and docs/*/13-*.md).
+# Names of scripts in ~/server/extras/ (without .sh). charge.sh starts them when a disk is
+# mounted and relaunches them if they die. Disable one without editing: touch ~/server/no-<name>
+SERVICES=""                  # e.g. "webdav dlna jellyfin"
+# Run once a day at 04:00. Format: "script args", e.g. "youtube-mirror.sh 3"
+NIGHTLY=""

@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# Smoke test of phone/noroot/charge.sh with a FAKE Shizuku (sa.sh) and a fake Termux home: one pass
+# (ONCE=1) per scenario. Checks what it hands the bot (battery, charge state, Wi-Fi), the
+# BOT_ENABLED latch and the USB-disk service gate. No phone needed.
+set -u
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+PASS=0; FAIL=0
+check() { if [ "$2" = "$3" ]; then PASS=$((PASS + 1)); echo "ok   - $1"
+          else FAIL=$((FAIL + 1)); echo "FAIL - $1 (expected '$2', got '$3')"; fi; }
+
+# Termux-only commands the script calls
+S="$T/shims"; mkdir -p "$S"
+# setsid is missing on some PCs (Git Bash): a pass-through stand-in is enough here
+for c in getprop pkill termux-wake-lock; do printf '#!/bin/sh\nexit 0\n' > "$S/$c"; done
+printf '#!/bin/sh\nexit 1\n' > "$S/pgrep"
+printf '#!/bin/sh
+exec "$@"
+' > "$S/setsid"
+chmod +x "$S"/*
+
+setup() {    # setup <conf lines...>; plain battery/Wi-Fi report in $T/out
+  rm -rf "$T/home" "$T/prefix"; mkdir -p "$T/home/server/extras" "$T/prefix"
+  OPT="$T/prefix/var/lib/proot-distro/containers/bot/rootfs/opt/bot"; mkdir -p "$OPT"
+  printf '%s\n' "$@" > "$T/home/server/server.conf"
+  # fake sa.sh: "echo OK" -> OK; the big status query -> $T/out
+  printf '#!/bin/sh\ncase "$1" in "echo OK") echo OK ;; *capacity*) cat "%s/out" ;; esac\n' "$T" > "$T/home/server/sa.sh"
+  chmod +x "$T/home/server/sa.sh"
+}
+report() {   # report <capacity> <status> <plug> <voltage> <limit> <vol>
+  cat > "$T/out" <<EOF
+capacity=$1
+status=$2
+temp=301
+voltage_now=$4
+current_now=-100
+health=Good
+technology=Li-poly
+plug=$3
+uptime=1234.56 2000.00
+loadavg=0.10 0.20 0.30 1/200 999
+limit=$5
+vol=$6
+WifiInfo: SSID: x, RSSI: -61, Tx Link speed: 433Mbps, Frequency: 5180MHz
+EOF
+}
+run() { HOME="$T/home" PREFIX="$T/prefix" PATH="$S:$PATH" ONCE=1 bash "$HERE/phone/noroot/charge.sh" >/dev/null 2>&1; }
+O() { cat "$OPT/$1" 2>/dev/null; }
+
+setup "OEM="
+report 50 Charging 10 4200 "80 1" ""; run
+check "charging at 50%: not paused" 0 "$(O charge_paused)"
+check "battery capacity handed to the bot" 50 "$(O sys/battery/capacity)"
+check "temperature handed to the bot" 301 "$(O sys/battery/temp)"
+check "voltage mV converted to microvolts" 4200000 "$(O sys/battery/voltage_now)"
+check "uptime handed to the bot" "1234.56 2000.00" "$(O sys/uptime)"
+check "Wi-Fi json for the bot" '{"rssi": -61, "link": 433, "freq": 5180}' "$(O sys/wifi.json)"
+check "no OEM: default limit shown" "hasta 80" "$(O charge_range)"
+
+report 80 "Not charging" 10 4300000 "80 1" ""; run
+check "plugged in, not charging: reported as paused" 1 "$(O charge_paused)"
+check "paused status is shown as Discharging (living off the charger)" Discharging "$(O sys/battery/status)"
+check "voltage already in microvolts is kept" 4300000 "$(O sys/battery/voltage_now)"
+
+report 80 Full 10 4300000 "80 1" ""; run
+check "Full is not 'paused' status-wise (stays Full)" Full "$(O sys/battery/status)"
+
+report 70 Discharging 00 4000 "80 1" ""; run
+check "unplugged: not paused (a real power cut)" 0 "$(O charge_paused)"
+
+setup "OEM=oplus"
+report 60 Charging 10 4200 "75 1" ""; run
+check "oplus: charge limit read from the phone" "hasta 75" "$(O charge_range)"
+report 60 Charging 10 4200 "75 0" ""; run
+check "oplus: limiter switched off -> 100" "hasta 100" "$(O charge_range)"
+
+# BOT_ENABLED latch: charge.sh must not start bot.sh without the file
+setup "OEM="
+report 50 Charging 10 4200 "80 1" ""
+printf '#!/bin/sh\ntouch "%s/bot-started"\n' "$T" > "$T/home/server/bot.sh"; chmod +x "$T/home/server/bot.sh"
+rm -f "$T/bot-started"; run
+[ -f "$T/bot-started" ] && r=started || r=not-started
+check "no BOT_ENABLED: bot.sh not started" not-started "$r"
+touch "$T/home/server/BOT_ENABLED"; run
+[ -f "$T/bot-started" ] && r=started || r=not-started
+check "BOT_ENABLED present: bot.sh started" started "$r"
+
+# USB-disk services: started only with a disk mounted, and a no-<name> file disables one
+setup "SERVICES=\"a b\""
+printf '#!/bin/sh\ntouch "%s/svc-a"; sleep 1\n' "$T" > "$T/home/server/extras/a.sh"
+printf '#!/bin/sh\ntouch "%s/svc-b"; sleep 1\n' "$T" > "$T/home/server/extras/b.sh"
+chmod +x "$T/home/server/extras/"*.sh
+rm -f "$T/svc-a" "$T/svc-b"
+report 50 Charging 10 4200 "80 1" ""; run; sleep 0.5
+[ -f "$T/svc-a" ] && r=started || r=not-started
+check "no disk: service not started" not-started "$r"
+touch "$T/home/server/no-b"
+# the disk id is written during a pass and the services are checked at the start of the
+# next one (a minute later in real life): two passes
+report 50 Charging 10 4200 "80 1" "ABCD-1234"; run; run; sleep 3
+[ -f "$T/svc-a" ] && r=started || r=not-started
+check "disk mounted: service a started" started "$r"
+[ -f "$T/svc-b" ] && r=started || r=not-started
+check "no-b file: service b disabled" not-started "$r"
+check "disk id handed to enter.sh" "ABCD-1234" "$(O sys/disk)"
+
+echo "---- $PASS passed, $FAIL failed"
+[ "$FAIL" = 0 ]

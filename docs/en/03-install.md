@@ -1,5 +1,7 @@
 # 03 · Install: busybox, Debian and the scripts
 
+> **No root?** This page is for root mode. Use [12 · No-root mode](12-no-root.md) instead.
+
 Assumes: the phone is rooted ([02](02-root.md)), USB debugging works, and `config.sh` is filled
 in ([01](01-prepare.md)). All commands run on your **PC**, from the repository folder, in bash.
 

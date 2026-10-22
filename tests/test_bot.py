@@ -65,7 +65,7 @@ class PluginLoading(unittest.TestCase):
     def test_all_example_plugins_load(self):
         self.assertEqual(
             set(bot.PLUGIN_COMMANDS),
-            {"/foto_camaras", "/clip_camaras", "/alexa", "/sticker", "/scrobble", "/lastfm"})
+            {"/foto_camaras", "/clip_camaras", "/alexa", "/sticker", "/scrobble", "/lastfm", "/likes"})
 
     def test_helper_modules_are_not_plugins(self):
         # _camaras.py & co. start with "_" and must not be loaded as plugins
@@ -77,9 +77,11 @@ class PluginLoading(unittest.TestCase):
             self.assertTrue(bot.PLUGIN_COMMANDS[c]["owner"])
 
     def test_loop_health_and_document_hooks_registered(self):
-        self.assertEqual(len(bot.PLUGIN_LOOPS), 1)         # scrobbler
+        self.assertEqual(len(bot.PLUGIN_LOOPS), 3)         # scrobbler + likes (loop, feeder)
         self.assertEqual(len(bot.PLUGIN_HEALTH), 2)        # scrobbler + cameras
         self.assertEqual(len(bot.PLUGIN_DOCS), 1)
+        self.assertEqual(len(bot.PLUGIN_JOB_DONE), 1)      # likes: bulk queue progress
+        self.assertIn("canciones", bot.ROLE_INFO)          # a plugin added a channel role
 
     def test_broken_plugin_does_not_stop_the_others(self):
         (BASE / "plugins" / "zz_broken.py").write_text("def setup(api):\n    raise RuntimeError('x')\n")
@@ -159,6 +161,18 @@ class CoreHelpers(unittest.TestCase):
         (BASE / "charge_paused").unlink()
         self.assertEqual(bot.charge_paused(), "0")
 
+    def test_clean_url_drops_trackers(self):
+        self.assertEqual(bot.clean_url("https://www.instagram.com/reel/AbC/?igsh=xyz&img_index=2"),
+                         "https://www.instagram.com/reel/AbC/")
+        self.assertEqual(bot.clean_url("https://youtu.be/abcDEF12345?si=TRACK&t=30"),
+                         "https://www.youtube.com/watch?v=abcDEF12345&t=30")
+        self.assertEqual(bot.clean_url("https://www.youtube.com/shorts/abcDEF12345?feature=share"),
+                         "https://www.youtube.com/shorts/abcDEF12345")
+
+    def test_cache_key_instagram_ignores_every_param(self):
+        self.assertEqual(bot.cache_key("https://www.instagram.com/p/AbC/?utm_source=ig&hl=es", "video"),
+                         bot.cache_key("https://instagram.com/p/AbC/", "video"))
+
     def test_parse_cookies(self):
         sample = ".instagram.com\tTRUE\t/\tTRUE\t1999999999\tsessionid\tabc"
         self.assertEqual(bot.parse_cookies(sample), {"instagram.com": {"sessionid": 1999999999}})
@@ -173,6 +187,28 @@ class CoreHelpers(unittest.TestCase):
         finally:
             bot.run = real
         self.assertIn("Debian", bot.about_text(True))
+
+
+class ChannelRoles(unittest.TestCase):
+    def test_channel_event_assigns_role_from_title_and_ignores_non_owner(self):
+        bot.CHANNELS_FILE.unlink(missing_ok=True)
+        SAID.clear()
+        left = []
+        real_tg = bot.tg
+        bot.tg = lambda method, **p: left.append(method)
+        try:
+            ev = lambda who: {"chat": {"id": -100, "type": "channel", "title": "Mis Canciones"},
+                              "new_chat_member": {"status": "administrator", "can_post_messages": True},
+                              "from": {"id": who}}
+            bot.channel_event(ev(2))                       # not the owner: the bot leaves
+            self.assertIn("leaveChat", left)
+            self.assertEqual(bot.load_channels()["list"], [])
+            bot.channel_event(ev(1))                       # the owner
+            d = bot.load_channels()
+            self.assertEqual(d["roles"].get("canciones"), -100)
+        finally:
+            bot.tg = real_tg
+            bot.CHANNELS_FILE.unlink(missing_ok=True)
 
 
 class Scrobbler(unittest.TestCase):

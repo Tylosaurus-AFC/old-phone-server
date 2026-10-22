@@ -1,0 +1,9 @@
+{"name": "Realme 12+ 5G",
+ "intro": "Un Realme 12+ 5G reconvertido en servidor, sin root (Termux)",
+ "cpu": "Dimensity 7050 de 8 núcleos",
+ "android": "Android 16 (Realme UI 7)",
+ "root": "sin root (Termux + Shizuku)",
+ "battery": "5000 mAh (la original)",
+ "remote": "SSH en :8022",
+ "wifi_note": false,
+ "charge_note": "Carga {range} % (límite de carga del propio móvil); si pasa de 42 °C te aviso"}
