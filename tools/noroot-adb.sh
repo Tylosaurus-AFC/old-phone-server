@@ -9,7 +9,8 @@
 # If Termux is down: adb -s <serial> shell am start -n com.termux/.app.TermuxActivity
 set -uo pipefail
 source "$(dirname "$0")/noroot-common.sh"
-IP="${NOROOT_IP}"
+IP="${NOROOT_IP:-}"
+[ -n "$IP" ] || { echo "Set NOROOT_IP (the phone's Wi-Fi IP) in config.sh." >&2; exit 1; }
 ADB="${ADB:-adb}"
 ok() { [ "$("$ADB" -s "$1" get-state 2>/dev/null)" = device ]; }
 

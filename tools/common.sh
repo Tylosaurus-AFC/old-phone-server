@@ -6,7 +6,8 @@ if [ -f "$ROOT/config.sh" ]; then
   # shellcheck disable=SC1091
   source "$ROOT/config.sh"
 else
-  echo "Missing config.sh -- copy config.example.sh to config.sh and edit it." >&2
+  echo "Missing $ROOT/config.sh -- create it from the example and edit it:" >&2
+  echo "  cp \"$ROOT/config.example.sh\" \"$ROOT/config.sh\"" >&2
   exit 1
 fi
 DEBIAN=/data/debian
@@ -17,8 +18,33 @@ a() { "$ADB" -s "$SERIAL" "$@"; }
 # adb.exe is a Windows program: it needs C:/... paths
 winpath() { cygpath -m "$1" 2>/dev/null || echo "$1"; }
 
+# Settings that cannot work, found before talking to the phone (clearer than a failed adb
+# call later). Unknown ROOT_MODE/ARCH only warn: other values keep their old behaviour.
+check_config() {
+  local bad=0
+  if ! command -v "${ADB:-}" >/dev/null 2>&1; then
+    echo "adb not found (ADB=${ADB:-} in config.sh). Install Android platform-tools, or set ADB to" >&2
+    echo "the full path of adb (adb.exe on Windows), e.g. ADB=/c/.../platform-tools/adb.exe" >&2
+    bad=1
+  fi
+  if [ -z "${SERIAL:-}" ] && [ -z "${USB_SERIAL:-}" ] && [ -z "${PHONE_IP:-}" ]; then
+    echo "No way to reach the phone: set USB_SERIAL (see 'adb devices') or PHONE_IP in config.sh." >&2
+    bad=1
+  fi
+  case "${ROOT_MODE:-su}" in
+    su|adbroot) ;;
+    *) echo "Warning: ROOT_MODE=$ROOT_MODE is not 'su' or 'adbroot'; using su." >&2 ;;
+  esac
+  case "${ARCH:-armhf}" in
+    armhf|arm64) ;;
+    *) echo "Warning: ARCH=$ARCH is not 'armhf' or 'arm64' (see config.example.sh)." >&2 ;;
+  esac
+  [ "$bad" = 0 ] || exit 1
+}
+
 # Use USB if the phone is plugged in; otherwise connect over Wi-Fi. SERIAL=... forces one.
 need_phone() {
+  check_config
   if [ -n "${SERIAL:-}" ]; then
     :
   elif [ -n "$USB_SERIAL" ] && "$ADB" -s "$USB_SERIAL" get-state >/dev/null 2>&1; then

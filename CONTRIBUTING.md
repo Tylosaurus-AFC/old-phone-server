@@ -25,7 +25,7 @@ Thank you for helping old phones get a second life.
   `phone/*.sh`). Termux scripts (`phone/noroot/`) and the PC tools (`tools/*.sh`) are bash. Always LF line endings (`.gitattributes`).
 * Run `tests/run.sh` before sending a pull request (`pip install requests`). Add a test when you fix a bug.
   It checks shell syntax, scans tracked files for bot tokens/private keys, runs the shell tests
-  against a fake battery and a fake Shizuku, and the bot's unit tests (no phone or network
+  against a fake battery and a fake Shizuku, the PC tools against fake adb/ssh, and the bot's unit tests (no phone or network
   needed, ~30 s). GitHub Actions runs the same script on every push and pull request
   (`.github/workflows/tests.yml`). Passing tests do **not** prove a phone works: say what you
   checked on real hardware.

@@ -5,7 +5,8 @@ if [ -f "$ROOT/config.sh" ]; then
   # shellcheck disable=SC1091
   source "$ROOT/config.sh"
 else
-  echo "Missing config.sh -- copy config.example.sh to config.sh and edit it." >&2
+  echo "Missing $ROOT/config.sh -- create it from the example and edit it:" >&2
+  echo "  cp \"$ROOT/config.example.sh\" \"$ROOT/config.sh\"" >&2
   exit 1
 fi
 H="${NOROOT_SSH:-phone}"          # ssh host alias of the phone (see config.example.sh)
@@ -16,7 +17,11 @@ CT='$PREFIX/var/lib/proot-distro/containers/'"$CONTAINER"'/rootfs'   # $PREFIX i
 ph() { ssh -o BatchMode=yes -o ConnectTimeout=15 "$H" "$@"; }
 
 need_phone() {
-  ph 'echo ok' >/dev/null 2>&1 || {
+  command -v ssh >/dev/null 2>&1 || {
+    echo "ssh not found. Install an OpenSSH client (Git for Windows includes one)." >&2
+    exit 1
+  }
+  ph 'echo ok' </dev/null >/dev/null 2>&1 || {   # </dev/null: keep the user's typed input
     echo "Cannot reach the phone over SSH as '$H'."
     echo "Check: Termux is open/running, sshd is up (run 'sshd' in Termux), the ~/.ssh/config"
     echo "entry (docs/*/12-*.md, step 3) and that the phone is on the same network."

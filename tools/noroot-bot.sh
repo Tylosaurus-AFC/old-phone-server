@@ -19,6 +19,7 @@ api)
   read -r -p "api_id (digits): " API_ID
   read -r -s -p "api_hash (nothing is shown): " API_HASH; echo
   case "$API_ID" in ''|*[!0-9]*) echo "api_id must be only digits."; exit 1 ;; esac
+  [[ "$API_HASH" =~ ^[0-9a-fA-F]{32}$ ]] || { echo "api_hash looks wrong: it is 32 hex characters (0-9, a-f), from my.telegram.org."; exit 1; }
   printf '%s\n%s\n' "$API_ID" "$API_HASH" | ph "mkdir -p $OPT && cat > $OPT/api.txt && chmod 600 $OPT/api.txt && echo 'api.txt saved'"
   ;;
 enable)

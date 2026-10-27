@@ -8,7 +8,7 @@ need_phone
 read -r -p "api_id (digits): " API_ID
 read -r -s -p "api_hash (nothing is shown): " API_HASH; echo
 case "$API_ID" in ''|*[!0-9]*) echo "api_id must be only digits."; exit 1 ;; esac
-case "$API_HASH" in [0-9a-f]*) ;; *) echo "api_hash looks wrong (32 hex characters)."; exit 1 ;; esac
+[[ "$API_HASH" =~ ^[0-9a-fA-F]{32}$ ]] || { echo "api_hash looks wrong: it is 32 hex characters (0-9, a-f), from my.telegram.org."; exit 1; }
 F="$(mktemp)"; printf '%s\n%s\n' "$API_ID" "$API_HASH" > "$F"
 a push "$(winpath "$F")" "$TMP.api" >/dev/null; rm -f "$F"
 remote <<EOF

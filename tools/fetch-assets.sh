@@ -7,6 +7,11 @@
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 OUT="$ROOT/downloads"; mkdir -p "$OUT"
+case "${ARCH:-}" in
+  armhf|arm64) ;;
+  *) echo "ARCH=${ARCH:-}: must be armhf (32-bit ARM) or arm64 in config.sh." >&2
+     echo "Check the phone with: adb shell getprop ro.product.cpu.abilist" >&2; exit 1 ;;
+esac
 BASE="https://images.linuxcontainers.org/images/debian/trixie/$ARCH/default"
 
 echo "Looking for the newest Debian trixie $ARCH image..."

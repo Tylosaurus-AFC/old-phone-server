@@ -13,6 +13,7 @@ echo "== python: undefined names and syntax (ruff, if installed) =="
 if command -v ruff >/dev/null 2>&1; then ruff check -q --select F821,F811,E9 bot extras tests && echo ok
 else echo "skipped (pip install ruff)"; fi
 echo "== backup/restore lists in sync =="; bash tests/test_backup_lists.sh
+echo "== PC tools with fake adb/ssh =="; bash tests/test_tools.sh
 echo "== charge.sh against a fake battery =="; bash tests/test_charge.sh
 echo "== no-root charge.sh with a fake Shizuku =="; bash tests/test_noroot.sh
 echo "== bot.sh back-off and start.sh boot sequence =="; bash tests/test_services.sh
