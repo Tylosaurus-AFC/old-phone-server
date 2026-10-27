@@ -47,6 +47,9 @@ online() {
   return 1
 }
 put() { echo "$2" > $SYS/$1.tmp && mv $SYS/$1.tmp $SYS/$1; }   # no half-written reads
+# Whole number or 0: values read from Android may be empty or "null", and bash arithmetic on
+# them aborts the whole script (then nothing after it in the pass runs: bot relaunch, hang check...)
+int() { case "$1" in -[0-9]*|[0-9]*) echo "${1%%[!0-9-]*}" ;; *) echo 0 ;; esac; }
 
 # --- Shell permissions: Shizuku (rish) -------------------------------------------------
 # Shizuku (thedjchi's fork) starts by itself at boot through wireless debugging and its
@@ -159,7 +162,7 @@ while true; do
     cap=$(val capacity) status=$(val status) temp=$(val temp)
     case "$(val plug)" in *1*) plugged=1 ;; *) plugged=0 ;; esac
     for f in current_now health technology; do put battery/$f "$(val $f)"; done
-    v=$(val voltage_now); [ "${v:-0}" -lt 100000 ] && v=$((${v:-0} * 1000))
+    v=$(int "$(val voltage_now)"); [ "$v" -lt 100000 ] && v=$((v * 1000))
     put battery/voltage_now "$v"                 # some phones give mV; the bot expects µV
     put uptime "$(val uptime)"; put loadavg "$(val loadavg)"
     # USB disk mounted (enter.sh binds it). Only when the query worked: if Shizuku did not
@@ -184,7 +187,7 @@ while true; do
     cap=$(echo "$J" | jq -r .percentage) temp=$(echo "$J" | jq -r '.temperature * 10 | floor')
     status=$(echo "$J" | jq -r .status | sed 's/^CHARGING$/Charging/; s/^DISCHARGING$/Discharging/; s/^FULL$/Full/; s/^NOT_CHARGING$/Not charging/')
     [ "$(echo "$J" | jq -r .plugged)" = UNPLUGGED ] && plugged=0 || plugged=1
-    put battery/voltage_now "$(( $(echo "$J" | jq -r '.voltage // 0') * 1000 ))"
+    put battery/voltage_now "$(( $(int "$(echo "$J" | jq -r '.voltage // 0' 2>/dev/null)") * 1000 ))"
     put battery/health "$(echo "$J" | jq -r .health | sed 's/^GOOD$/Good/; s/^OVERHEAT$/Overheat/')"
     put battery/technology "$(echo "$J" | jq -r .technology)"
     put uptime "$((NOW - BOOT0)).00 0.00"          # approximate: since Termux's boot
@@ -197,6 +200,7 @@ while true; do
   # Plugged in but not charging = the maker's charge limit has it paused: told to the bot
   # through $OPT/charge_paused ("on pause, living off the charger")
   if [ -n "$cap" ] && [ "$cap" != null ]; then
+    temp=$(int "$temp")
     PAUSED=0
     [ $plugged = 1 ] && [ "$status" != Charging ] && PAUSED=1
     [ $PAUSED = 1 ] && [ "$status" != Full ] && status=Discharging
@@ -248,7 +252,7 @@ while true; do
   # Heartbeat: the bot's main loop writes the time to $HB on every pass (at most ~70 s
   # apart). Older than 5 min with the process alive = frozen.
   if [ -f $HB ] && [ $NOW -gt $HUNG_UNTIL ]; then
-    LAST=$(cat $HB 2>/dev/null); LAST=${LAST%.*}; LAST=${LAST:-$NOW}
+    LAST=$(int "$(cat $HB 2>/dev/null)"); [ "$LAST" = 0 ] && LAST=$NOW   # empty/corrupt: no verdict
     if [ $((NOW - LAST)) -gt $HUNG ] && pgrep -f "[o]pt/bot/bot.py" >/dev/null; then
       log salud "bot frozen $((NOW - LAST))s, restarting"
       ev colgado "el bot no respondía ($((NOW - LAST)) s sin señal de vida); reiniciado"

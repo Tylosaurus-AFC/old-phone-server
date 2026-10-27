@@ -46,7 +46,7 @@ vol=$6
 WifiInfo: SSID: x, RSSI: -61, Tx Link speed: 433Mbps, Frequency: 5180MHz
 EOF
 }
-run() { HOME="$T/home" PREFIX="$T/prefix" PATH="$S:$PATH" ONCE=1 bash "$HERE/phone/noroot/charge.sh" >/dev/null 2>&1; }
+run() { HOME="$T/home" PREFIX="$T/prefix" PATH="$S:$PATH" ONCE=1 bash "$HERE/phone/noroot/charge.sh" >/dev/null 2>&1; RC=$?; }
 O() { cat "$OPT/$1" 2>/dev/null; }
 
 setup "OEM=" "NET_HOSTS=127.0.0.1"
@@ -105,6 +105,28 @@ check "disk mounted: service a started" started "$r"
 [ -f "$T/svc-b" ] && r=started || r=not-started
 check "no-b file: service b disabled" not-started "$r"
 check "disk id handed to enter.sh" "ABCD-1234" "$(O sys/disk)"
+
+# Shizuku down AND Termux:API answering nothing (not installed / timed out): the pass must
+# still reach the bot service (it used to die on arithmetic over an empty voltage)
+setup "OEM=" "NET_HOSTS=127.0.0.1"
+printf '#!/bin/sh\nexit 0\n' > "$T/home/server/sa.sh"              # Shizuku silent
+printf '#!/bin/sh\nexit 0\n' > "$S/termux-battery-status"; printf '#!/bin/sh\nexit 0\n' > "$S/termux-wifi-connectioninfo"
+chmod +x "$S/termux-battery-status" "$S/termux-wifi-connectioninfo"
+printf '#!/bin/sh\ntouch "%s/bot-started"\n' "$T" > "$T/home/server/bot.sh"; chmod +x "$T/home/server/bot.sh"
+touch "$T/home/server/BOT_ENABLED"; rm -f "$T/bot-started"; run
+[ -f "$T/bot-started" ] && r=started || r=not-started
+check "no Shizuku, empty Termux:API: the pass still relaunches the bot" started "$r"
+printf '#!/bin/sh\necho "{\\"percentage\\": 55, \\"temperature\\": 30.4, \\"status\\": \\"CHARGING\\", \\"plugged\\": \\"PLUGGED_AC\\", \\"voltage\\": 4215, \\"health\\": \\"GOOD\\"}"\n' > "$S/termux-battery-status"
+rm -f "$T/bot-started"; run
+check "no Shizuku, Termux:API battery: capacity handed to the bot" 55 "$(O sys/battery/capacity)"
+check "no Shizuku, Termux:API battery: voltage mV -> microvolts" 4215000 "$(O sys/battery/voltage_now)"
+rm -f "$S/termux-battery-status" "$S/termux-wifi-connectioninfo"
+
+# A corrupt heartbeat file (half-written, disk full) must not abort the pass
+setup "OEM=" "NET_HOSTS=127.0.0.1"
+report 50 Charging 10 4200 "80 1" ""
+printf '17x\n' > "$OPT/heartbeat"; run
+check "corrupt heartbeat: the pass completes (exit 0)" 0 "$RC"
 
 # Keep-alive settings through Shizuku: applied when Shizuku answers, unless KEEPALIVE=0
 setup "OEM=" "NET_HOSTS=127.0.0.1"
