@@ -103,6 +103,36 @@ keepalive() {
   KEEP_FAIL=0
 }
 
+# The bot cannot report its own death: if its heartbeat stops for 15 min while online, the
+# watchdog tells the owner itself (Telegram Bot API through curl). One message per incident,
+# retried every 10 min only until Telegram confirms it ("ok":true); the bot reports its own
+# recovery when it comes back (report_crashes). The token goes to curl on stdin (-K -), not
+# on the command line. BOTDOWN_ALERT=0 in server.conf turns it off.
+tg_owner() {   # tg_owner "text" -> 0 only if Telegram confirmed the message
+  local tok own
+  tok=$(head -1 $OPT/token 2>/dev/null); own=$(head -1 $OPT/owners 2>/dev/null)
+  [ -n "$tok" ] && [ -n "$own" ] && command -v curl >/dev/null || return 1
+  printf 'url = "https://api.telegram.org/bot%s/sendMessage"\ndata-urlencode = "chat_id=%s"\ndata-urlencode = "text=%s"\n' \
+    "$tok" "$own" "$1" | timeout 40 curl -sS -m 30 -K - 2>/dev/null | grep -q '"ok":true'
+}
+botdown_check() {
+  local age
+  [ -f $D/BOT_ENABLED ] && [ "${BOTDOWN_ALERT:-1}" != 0 ] || { rm -f $D/botdown; return; }
+  age=$(( NOW - $(int "$(cat $HB 2>/dev/null)") ))
+  if [ ! -f $HB ] || [ $age -lt 900 ]; then
+    rm -f $D/botdown; return                      # alive (or never started yet)
+  fi
+  [ -f $D/botdown ] || echo "start=$NOW sent=0 next=0" > $D/botdown
+  . $D/botdown 2>/dev/null
+  [ "${sent:-0}" = 1 ] || [ $NOW -lt "${next:-0}" ] || ! online && return
+  if tg_owner "⚠️ El bot no responde desde las $(date -d @$((NOW - age)) +%H:%M 2>/dev/null || echo '?') (sin señal de vida hace $((age / 60)) min). El vigilante lo está reiniciando; si no vuelve, revisa el móvil o ejecuta tools/noroot-doctor.sh."; then
+    echo "start=$start sent=1 next=0" > $D/botdown
+    ev aviso "el vigilante avisó por Telegram: el bot no responde"
+  else
+    echo "start=$start sent=0 next=$((NOW + 600))" > $D/botdown
+  fi
+}
+
 # Shizuku state, for the bot (/salud, alerts) and doctor.sh: $SYS/shizuku (key=value).
 # When it is down: why (shizuku.sh probe), checks only every 5 min after the first 10 min
 # (each failed check costs ~40 s of rish time-outs), and, if SHIZUKU_AUTH is set, asks the
@@ -320,6 +350,8 @@ while true; do
       HUNG_UNTIL=$((NOW + 600))
     fi
   fi
+
+  botdown_check
 
   # --- Network: 5 minutes without Internet -> cycle Wi-Fi --------------------------------------
   if online; then
