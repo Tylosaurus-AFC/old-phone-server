@@ -14,5 +14,10 @@ echo "$(date) server start-up; bot $( [ -f $D/BOT_ENABLED ] && echo enabled || e
 
 # Watchdog (battery/Wi-Fi/uptime for the bot, hangs, /reiniciar, the bot if enabled).
 # If it dies it is relaunched a minute later (charge.sh exits by itself if another runs).
-setsid nohup sh -c "while true; do $D/charge.sh >/dev/null 2>&1; sleep 60; done" \
-  </dev/null >/dev/null 2>&1 &
+# This file also runs when Termux is reopened (~/.bashrc hook, guard.sh): only one loop.
+OLD=$(cat $D/loop.pid 2>/dev/null)
+if [ -z "$OLD" ] || ! grep -q "charge.sh" /proc/$OLD/cmdline 2>/dev/null; then
+  setsid nohup sh -c "while true; do $D/charge.sh >/dev/null 2>&1; sleep 60; done" \
+    </dev/null >/dev/null 2>&1 &
+  echo $! > $D/loop.pid
+fi
