@@ -34,6 +34,13 @@ tiene el detalle). Revisión hecha **sin teléfono**: todo sale de leer el códi
 | 14 | Baja | `noroot-bot.sh api` no validaba `api_hash`; `set-api.sh` solo el primer carácter. | Corregido: 32 hexadecimales |
 | 15 | Baja | `fetch-assets.sh` con `ARCH` incorrecto o ausente descargaba de una URL inexistente. | Corregido |
 | 16 | Baja | `noroot-adb.sh` con `NOROOT_IP` vacío aceptaba cualquier dispositivo. | Corregido |
+| 17 | Alta | Las exenciones anti-cierre (batería, segundo plano, grupo de espera, phantom killer de Android 12+) se hacían a mano una vez; Android, el fabricante o Google Play Services pueden deshacerlas sin que nada lo note. | Corregido: `charge.sh` las reaplica por Shizuku al aparecer y cada 30 min (`KEEPALIVE=0` para no tocarlas) |
+| 18 | Alta | No había forma de saber si el móvil está preparado para sobrevivir (p. ej. Termux:Boot nunca abierto o forzado a detenerse). | Corregido: `doctor.sh`, `tools/noroot-doctor.sh`, en `/salud` y `/diagnostico` |
+| 19 | Media | `boot.sh` se ejecuta también al reabrir Termux y lanzaba otro bucle vigilante cada vez. | Corregido: `loop.pid` |
+
+Análisis completo, perfiles por fabricante y matriz: [`docs/es/14-sin-root-fiabilidad.md`](es/14-sin-root-fiabilidad.md).
+Lo que `doctor.sh` lee de Android (`dumpsys`, `am`, etiqueta del wake lock) sale de la documentación y
+del código de Android/Termux, **no de un móvil**: un formato distinto saldría como aviso, nunca como fallo del script.
 
 Se mantiene a propósito: un `ROOT_MODE` desconocido (p. ej. `magisk`) sigue funcionando como `su`
 y un `BOOT_MODE` desconocido significa «instálalo a mano»; `ROOT_MODE` y `ARCH` solo **avisan**.
@@ -42,7 +49,7 @@ y un `BOOT_MODE` desconocido significa «instálalo a mano»; `ROOT_MODE` y `ARC
 
 `tests/run.sh` completo, ~27 s, todo en verde: sintaxis, búsqueda de secretos, `ruff`, listas de
 respaldo 5/5, herramientas del PC 46/46, `test_charge` 17/17, `test_noroot` 20/20,
-`test_services` 9/9, `test_bot` 38/38.
+`test_services` 9/9, `test_bot` 42/42, `test_doctor` 31/31 (`test_noroot` 26/26, herramientas 48/48 tras la cuarta tanda).
 
 `tests/test_tools.sh` usa `adb`, `ssh`, `curl` y `sleep` falsos que registran lo que se ejecutaría
 en el móvil sin ejecutarlo. Con las herramientas antiguas da 11 fallos.
@@ -61,6 +68,7 @@ scripts que corren en el móvil solo se comprueban con `sh -n`, no se ejecutan.
 6. Herramientas del PC en Windows (Git Bash) y Linux con `config.sh` correcto e incorrecto.
 7. `printf 'TOKEN\n' | tools/noroot-bot.sh token` guarda el token.
 8. `NET_HOSTS` en Termux.
+9. `tools/noroot-doctor.sh` en un móvil sano y tras forzar la detención de Termux:Boot; las pruebas prolongadas de `docs/es/14-sin-root-fiabilidad.md`.
 
 No hay compatibilidad nueva verificada con ningún dispositivo ni versión de Android.
 

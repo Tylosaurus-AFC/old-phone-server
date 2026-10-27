@@ -176,8 +176,9 @@ adb: change those in the Settings UI (`~/server/ui.sh dump` / `ui.sh tap "Text"`
 | `enter.sh` | `proot-distro login` with the `/opt/bot/sys` binds (and the USB disk at `/mnt/disk`) |
 | `sa.sh 'cmds'` | runs commands as the shell user through `rish` and returns the output reliably (see below) |
 | `guard.sh` → `/data/local/tmp/srv-guard.sh` | shell-side guardian: keeps wireless debugging on; if Termux's `sshd` is gone for 2 passes, opens Termux's window so `~/.bashrc` restarts the server |
+| `doctor.sh` | read-only health check: OK/WARN/FAIL with what to do (`tools/noroot-doctor.sh` from the PC; hourly into `/salud`). See [14](14-no-root-reliability.md) |
 | `ui.sh` | tap and read the phone's own screen through Shizuku |
-| `server.conf` | settings (container name, `OEM`, services, nightly job, `NET_HOSTS` for the Internet check) |
+| `server.conf` | settings (container name, `OEM`, services, nightly job, `NET_HOSTS` for the Internet check, `KEEPALIVE`) |
 
 ### Gotchas that cost real time (so you can skip them)
 
@@ -226,5 +227,9 @@ Backups are interchangeable: `tools/backup.sh` (root) or `tools/noroot-backup.sh
 `tools/noroot-restore.sh backup/<date>` (or `tools/restore-config.sh` on a rooted phone). **Switch the bot
 off on the old phone first** — the same token on two phones gives Telegram error 409 and duplicated
 downloads.
+
+**Check the installation** at any time with `tools/noroot-doctor.sh`. What can still stop the server,
+what the watchdog re-applies by itself (battery exemptions, the phantom-process killer…) and how to test
+it for days: [14 · No-root 24/7](14-no-root-reliability.md).
 
 Next: [13 · Media recipes](13-media-recipes.md) (a NAS and media server on the same phone).

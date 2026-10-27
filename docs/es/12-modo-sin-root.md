@@ -175,8 +175,9 @@ cámbialo en la interfaz de Ajustes (`~/server/ui.sh dump` / `ui.sh tap "Texto"`
 | `enter.sh` | `proot-distro login` con los montajes de `/opt/bot/sys` (y el disco USB en `/mnt/disk`) |
 | `sa.sh 'órdenes'` | ejecuta órdenes como usuario shell por `rish` y devuelve la salida de forma fiable (ver abajo) |
 | `guard.sh` → `/data/local/tmp/srv-guard.sh` | guardián del lado shell: mantiene encendida la depuración inalámbrica; si el `sshd` de Termux falta 2 vueltas, abre la ventana de Termux para que `~/.bashrc` reinicie el servidor |
+| `doctor.sh` | comprobación de solo lectura: OK/WARN/FAIL con qué hacer (`tools/noroot-doctor.sh` desde el PC; cada hora en `/salud`). Ver [14](14-sin-root-fiabilidad.md) |
 | `ui.sh` | tocar y leer la pantalla del propio móvil por Shizuku |
-| `server.conf` | ajustes (nombre del contenedor, `OEM`, servicios, trabajo nocturno, `NET_HOSTS` para comprobar Internet) |
+| `server.conf` | ajustes (nombre del contenedor, `OEM`, servicios, trabajo nocturno, `NET_HOSTS` para comprobar Internet, `KEEPALIVE`) |
 
 ### Trampas que costaron tiempo de verdad (para que te las saltes)
 
@@ -224,5 +225,9 @@ corte de luz real, grupos, y varios días seguidos sin intervención.
 Los respaldos son intercambiables: `tools/backup.sh` (root) o `tools/noroot-backup.sh`, y luego
 `tools/noroot-restore.sh backup/<fecha>` (o `tools/restore-config.sh` en un móvil con root). **Apaga antes el bot
 en el móvil viejo** — el mismo token en dos móviles da el error 409 de Telegram y descargas duplicadas.
+
+**Comprueba la instalación** cuando quieras con `tools/noroot-doctor.sh`. Qué puede seguir parando el
+servidor, qué vuelve a aplicar solo el vigilante (exenciones de batería, el «phantom process killer»…) y
+cómo probarlo durante días: [14 · Sin root 24/7](14-sin-root-fiabilidad.md).
 
 Siguiente: [13 · Recetas multimedia](13-recetas-multimedia.md) (un NAS y servidor multimedia en el mismo móvil).

@@ -117,6 +117,7 @@ English: [docs/en](docs/en/) · Español: [docs/es](docs/es/)
 | [10 Móviles probados](docs/es/10-moviles-probados.md) | S4 mini, Moto X2, Tab A7, Realme 12+: manías y medidas |
 | [11 FAQ y seguridad](docs/es/11-faq-y-seguridad.md) | legal, seguridad, créditos |
 | [12 Modo sin root](docs/es/12-modo-sin-root.md) | Termux + proot + Shizuku, paso a paso, con supervisión probada |
+| [14 Sin root 24/7](docs/es/14-sin-root-fiabilidad.md) | qué puede parar un servidor sin root, las defensas, `doctor.sh`, perfiles por fabricante, matriz de compatibilidad |
 | [13 Recetas multimedia](docs/es/13-recetas-multimedia.md) | disco USB, WebDAV, DLNA, Jellyfin, espejo de YouTube, trampas de hubs |
 
 ## Estado

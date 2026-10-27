@@ -120,4 +120,5 @@ backups and restore, and a documented recovery procedure for every failure we hi
 | 10 | [Tested devices](10-tested-devices.md) | measurements and quirks of four real devices |
 | 11 | [FAQ and safety](11-faq-and-safety.md) | legal, security, risks, common questions |
 | 12 | [No-root mode](12-no-root.md) | the same server with Termux + proot + Shizuku, no root needed |
+| 14 | [No-root 24/7](14-no-root-reliability.md) | limits of no-root mode, defences, `doctor.sh`, compatibility matrix |
 | 13 | [Media recipes](13-media-recipes.md) | optional NAS / DLNA / Jellyfin / YouTube mirror on a USB disk |
