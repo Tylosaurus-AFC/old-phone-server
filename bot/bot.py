@@ -29,6 +29,7 @@ from pathlib import Path
 
 import requests
 
+import alerts
 import bigupload
 import db
 import diag
@@ -943,9 +944,6 @@ def monitor_loop():
             if cap <= 15 and status != "Charging":
                 alert("lowbat", f"🪫 Batería al {cap}% y no está cargando. "
                       "¿Se desconectó el cargador?", 6 * 3600)
-            free = shutil.disk_usage("/").free / 2**30
-            if free < 1:
-                alert("disk", f"💾 Quedan solo {free:.1f} GB libres en el móvil.", 12 * 3600)
         except Exception:
             log.exception("monitor")
         time.sleep(60)
@@ -2436,6 +2434,8 @@ def health_text():
     bad = [e for e in day if e["k"] in ("fallo", "caida", "colgado", "aviso")]
     if bad:
         lines.append(f"\nÚltimo problema: {html.escape(health.fmt(bad[-1]))}")
+    st = ALERTS.level()
+    lines.append(_check("Avisos automáticos", {"ok": True, "degraded": None}.get(st, False), ALERTS.summary()))
     lines.append("\n/historial – eventos recientes · /diagnostico – informe para pedir ayuda")
     return "\n".join(lines)
 
@@ -2453,6 +2453,136 @@ def diag_command(chat):
         say(chat, f"❌ No pude generar el informe: {str(e).replace(TOKEN, '…')[:200]}")
     finally:
         path.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------- Avisos por estado
+
+SHZ_FIX = {   # que hacer segun shizuku.sh probe (modo sin root)
+    "not-running": "abre Shizuku y pulsa Iniciar (con el Wi-Fi conectado)",
+    "app-unreachable": "abre la app Shizuku; ponla sin restricciones de batería",
+    "not-authorized": "en Shizuku > Aplicaciones autorizadas, activa Termux",
+    "awaiting-permission": "desbloquea el móvil y pulsa Permitir en el aviso de Shizuku",
+    "dex-writable": "en Termux: chmod 400 ~/server/rish_shizuku.dex",
+    "no-rish": "tools/noroot-install.sh rish <carpeta> desde el PC",
+}
+_tools_ok = {"t": 0, "ok": True}
+
+
+def _sysinfo(name):
+    out = {}
+    for line in read_sys(str(BASE / "sys" / name), "").splitlines():
+        k, _, v = line.partition("=")
+        out[k.strip()] = v.strip()
+    return out
+
+
+def collect_problems():
+    """Problemas reales de ahora mismo, para alerts.Alerts. "broken": el servidor no puede
+    hacer su trabajo (descargar, avisar, recuperarse); "degraded": lo hace, con limites.
+    Cada comprobacion va aparte: si una falla, las demas siguen."""
+    now, out = time.time(), []
+
+    def add(pid, level, title, impact="", fix=""):
+        out.append({"id": pid, "level": level, "title": title, "impact": impact, "fix": fix})
+
+    def guard(fn):
+        try:
+            fn()
+        except Exception:
+            log.exception("collect_problems: %s", fn.__name__)
+
+    def internet():
+        up, why = health.internet_ok()
+        if not up:
+            add("internet", "broken", f"Sin conexión a Internet ({why})", "no puedo descargar nada",
+                "mira el router y el Wi-Fi; el vigilante reinicia el Wi-Fi tras 5 min sin red")
+
+    def disk():
+        free = shutil.disk_usage(str(BASE)).free / 2**20
+        if free < 300:
+            add("disk", "broken", f"Casi sin espacio: {free:.0f} MB libres",
+                "las descargas y las actualizaciones fallan", "borra archivos grandes o fotos del móvil")
+        elif free < 1024:
+            add("disk", "degraded", f"Poco espacio: {free:.0f} MB libres",
+                "los vídeos grandes pueden fallar", "libera espacio en el móvil")
+
+    def tools():
+        if now - _tools_ok["t"] >= 1800:          # arrancar yt-dlp cuesta: cada 30 min
+            _tools_ok.update(t=now, ok=tools_work())
+        if not _tools_ok["ok"]:
+            add("tools", "broken", "yt-dlp o gallery-dl no arrancan", "no puedo descargar",
+                "/actualizar; si sigue igual, /diagnostico")
+
+    def noroot():
+        shz = _sysinfo("shizuku")
+        if not shz:
+            return                                  # modo root, o vigilante antiguo
+        checked = int(shz.get("checked") or 0)
+        if checked and now - checked > 900:
+            add("watchdog", "broken", "El vigilante (charge.sh) no está funcionando",
+                "si el bot se cae o se cuelga, nadie lo relanza",
+                "reinicia el móvil o, desde el PC, tools/noroot-doctor.sh")
+            return
+        state, since, boot = shz.get("state", "ok"), int(shz.get("since") or 0), int(shz.get("boot") or 0)
+        if state != "ok" and since and now - since >= 300 and now - boot >= 600:
+            fix = SHZ_FIX.get(state, "abre la app Shizuku y arráncala")
+            if shz.get("auth") != "1" and state in ("not-running", "app-unreachable"):
+                fix += "; pon SHIZUKU_AUTH en server.conf para que se reinicie solo"
+            add("shizuku", "degraded", f"Shizuku no funciona ({state})",
+                "si Android cierra Termux no se reabre solo, y /reiniciar del móvil no va", fix)
+
+    def doctor():
+        doc = read_sys(str(BASE / "sys" / "doctor.txt"), "")
+        path = BASE / "sys" / "doctor.txt"
+        if not doc.startswith("RESULT:") or now - path.stat().st_mtime > 3 * 3600:
+            return
+        lines = doc.splitlines()
+        have_shz = bool(_sysinfo("shizuku"))
+        for i, l in enumerate(lines):
+            if not l.startswith(("FAIL ", "WARN ")):
+                continue
+            title = l[5:]
+            if (have_shz and re.search(r"shizuku|wireless debugging|SHIZUKU_AUTH", title, re.I)) \
+                    or re.search(r"MB free", title):      # ya vigilados aparte
+                continue
+            fix = lines[i + 1].strip()[3:] if i + 1 < len(lines) and lines[i + 1].strip().startswith("->") else ""
+            add("doctor:" + re.sub(r"[\d\s]+", " ", title)[:60], "broken" if l.startswith("FAIL") else "degraded",
+                title, "", fix)
+
+    def crashes():
+        n = len(health.recent(since=now - 6 * 3600, kinds=["caida", "colgado"]))
+        if n >= 3:
+            add("crashes", "degraded", f"El bot se reinició {n} veces en 6 h", "", "/historial y /diagnostico")
+
+    def failures():
+        n = len(health.recent(since=now - 3600, kinds=["fallo"]))
+        if n >= 5:
+            add("failures", "degraded", f"{n} descargas fallidas en la última hora", "",
+                "/actualizar; si es una sola red, puede que haya cambiado algo")
+
+    for fn in (internet, disk, tools, noroot, doctor, crashes, failures):
+        guard(fn)
+    return out
+
+
+def _alert_send(text):
+    owner, _ = load_owners()
+    return bool(owner) and say(owner, text, parse_mode="HTML") is not None
+
+
+ALERTS = alerts.Alerts(BASE / "alerts.json", _alert_send, clean=lambda s: diag.redact(s))
+
+
+def alerts_loop():
+    """Cada 5 min: estado real del servidor -> aviso al dueño solo si cambia (alerts.py).
+    Nunca deja caer el hilo: un error aqui no afecta al bot."""
+    time.sleep(180)                 # que arranque todo antes de juzgar
+    while True:
+        try:
+            ALERTS.update(collect_problems())
+        except Exception:
+            log.exception("alerts_loop")
+        time.sleep(300)
 
 
 def history_text(arg):
@@ -3111,6 +3241,7 @@ def main():
     threading.Thread(target=auto_update, daemon=True).start()
     threading.Thread(target=subs_loop, daemon=True).start()
     threading.Thread(target=monitor_loop, daemon=True).start()
+    threading.Thread(target=alerts_loop, daemon=True).start()
     load_plugins()
     for fn in PLUGIN_LOOPS:
         threading.Thread(target=fn, daemon=True).start()

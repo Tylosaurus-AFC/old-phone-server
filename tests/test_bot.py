@@ -426,6 +426,113 @@ class NoRootDoctor(unittest.TestCase):
         self.assertIn("under battery optimisation", bot.diag.report())
 
 
+class ProblemCollection(unittest.TestCase):
+    """collect_problems(): the real checks behind the state-change alerts."""
+    def setUp(self):
+        (BASE / "sys").mkdir(exist_ok=True)
+        self.saved = (bot.health.internet_ok, bot.tools_work, bot.shutil.disk_usage)
+        bot.health.internet_ok = lambda: (True, "")
+        bot.tools_work = lambda: True
+        bot._tools_ok.update(t=0, ok=True)
+        bot.shutil.disk_usage = lambda p: shutil._ntuple_diskusage(10 * 2**30, 0, 10 * 2**30)
+
+    def tearDown(self):
+        bot.health.internet_ok, bot.tools_work, bot.shutil.disk_usage = self.saved
+        for f in ("doctor.txt", "shizuku"):
+            (BASE / "sys" / f).unlink(missing_ok=True)
+
+    def ids(self):
+        return {p["id"]: p for p in bot.collect_problems()}
+
+    def shizuku(self, **kw):
+        now = int(bot.time.time())
+        d = {"state": "ok", "since": 0, "tries": 0, "auth": 1, "checked": now, "boot": now - 86400, **kw}
+        (BASE / "sys" / "shizuku").write_text("".join(f"{k}={v}\n" for k, v in d.items()))
+
+    def test_healthy_server_has_no_problems(self):
+        self.shizuku()
+        self.assertEqual(bot.collect_problems(), [])
+
+    def test_no_internet_is_broken(self):
+        bot.health.internet_ok = lambda: (False, "no resuelve nombres (DNS)")
+        self.assertEqual(self.ids()["internet"]["level"], "broken")
+
+    def test_disk_thresholds(self):
+        bot.shutil.disk_usage = lambda p: shutil._ntuple_diskusage(2**30, 0, 800 * 2**20)
+        self.assertEqual(self.ids()["disk"]["level"], "degraded")
+        bot.shutil.disk_usage = lambda p: shutil._ntuple_diskusage(2**30, 0, 100 * 2**20)
+        self.assertEqual(self.ids()["disk"]["level"], "broken")
+
+    def test_downloaders_not_starting_is_broken_and_checked_at_most_every_30_min(self):
+        calls = []
+        bot.tools_work = lambda: calls.append(1) or False
+        self.assertEqual(self.ids()["tools"]["level"], "broken")
+        self.ids()
+        self.assertEqual(len(calls), 1)
+
+    def test_dead_watchdog_is_broken(self):
+        self.shizuku(checked=int(bot.time.time()) - 1800)
+        self.assertEqual(self.ids()["watchdog"]["level"], "broken")
+
+    def test_shizuku_down_is_degraded_with_the_fix_and_auth_hint(self):
+        now = int(bot.time.time())
+        self.shizuku(state="not-running", since=now - 900, auth=0)
+        p = self.ids()["shizuku"]
+        self.assertEqual(p["level"], "degraded")
+        self.assertIn("Iniciar", p["fix"])
+        self.assertIn("SHIZUKU_AUTH", p["fix"])
+
+    def test_shizuku_just_after_boot_is_not_a_problem(self):
+        now = int(bot.time.time())
+        self.shizuku(state="not-running", since=now - 400, boot=now - 400)
+        self.assertNotIn("shizuku", self.ids())
+
+    def test_doctor_lines_become_problems_without_duplicates(self):
+        self.shizuku()
+        (BASE / "sys" / "doctor.txt").write_text(
+            "RESULT: broken (1 fail, 3 warn) x\n"
+            "FAIL Termux is under battery optimisation\n     -> Settings > Apps > Termux > Battery\n"
+            "WARN no Termux wake lock: the CPU may sleep\n     -> run termux-wake-lock\n"
+            "WARN Shizuku lacks WRITE_SECURE_SETTINGS\n     -> adb shell pm grant ...\n"
+            "WARN 800 MB free\n     -> keep at least 1 GB free\n")
+        probs = bot.collect_problems()
+        titles = {p["title"]: p for p in probs}
+        self.assertEqual(titles["Termux is under battery optimisation"]["level"], "broken")
+        self.assertEqual(titles["Termux is under battery optimisation"]["fix"], "Settings > Apps > Termux > Battery")
+        self.assertIn("no Termux wake lock: the CPU may sleep", titles)
+        self.assertFalse([t for t in titles if "Shizuku" in t or "MB free" in t], "watched elsewhere")
+
+    def test_old_doctor_report_is_ignored(self):
+        f = BASE / "sys" / "doctor.txt"
+        f.write_text("RESULT: broken x\nFAIL something\n")
+        old = bot.time.time() - 4 * 3600
+        import os
+        os.utime(f, (old, old))
+        self.assertEqual([p for p in bot.collect_problems() if p["id"].startswith("doctor:")], [])
+
+    def test_one_failing_check_does_not_hide_the_others(self):
+        def boom():
+            raise OSError("socket exploded")
+        bot.health.internet_ok = boom
+        bot.shutil.disk_usage = lambda p: shutil._ntuple_diskusage(2**30, 0, 100 * 2**20)
+        self.assertIn("disk", self.ids())
+
+    def test_end_to_end_one_message_then_recovery(self):
+        sent = []
+        clock = [bot.time.time()]
+        a = bot.alerts.Alerts(Path(tempfile.mkdtemp()) / "a.json", lambda t: sent.append(t) or True,
+                              clean=bot.diag.redact, now=lambda: clock[0])
+        bot.health.internet_ok = lambda: (False, "sin salida a Internet")
+        for _ in range(4):
+            a.update(bot.collect_problems()); clock[0] += 300
+        bot.health.internet_ok = lambda: (True, "")
+        for _ in range(3):
+            a.update(bot.collect_problems()); clock[0] += 300
+        self.assertEqual(len(sent), 2, sent)
+        self.assertIn("Sin conexión a Internet", sent[0])
+        self.assertIn("Resuelto", sent[1])
+
+
 def tearDownModule():
     shutil.rmtree(_tmp, ignore_errors=True)
 
