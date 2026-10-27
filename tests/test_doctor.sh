@@ -36,11 +36,24 @@ setup() {     # a complete, healthy installation
   D="$T/home/server"; mkdir -p "$D" "$T/home/.termux/boot"
   OPT="$T/prefix/var/lib/proot-distro/containers/bot/rootfs/opt/bot"; mkdir -p "$OPT/venv/bin"
   printf '#!/bin/sh\n' > "$T/home/.termux/boot/00-server.sh"; chmod +x "$T/home/.termux/boot/00-server.sh"
-  printf 'OEM=\n' > "$D/server.conf"
+  printf 'OEM=\nSHIZUKU_AUTH=abc\n' > "$D/server.conf"
+  cp "$HERE/phone/noroot/shizuku.sh" "$D/"
+  # fake rish: prints what the real one prints in the state given by FAKE_RISH (texts from
+  # Shizuku's sources); sa.sh below is what doctor.sh uses when Shizuku works
+  cat > "$D/rish" <<'RISH'
+#!/bin/sh
+case "${FAKE_RISH:-ok}" in
+  ok) echo "Entering shell..."; echo SHZ_PROBE_OK ;;
+  not-running) echo "Server is not running" >&2; exit 1 ;;
+  denied) echo "Entering shell..."; echo "Permission denied" >&2; exit 1 ;;
+  timeout) echo "Request timeout. If you are using stealth mode, MANAGER_APPLICATION_ID may not be correct." >&2; exit 1 ;;
+  dialog) echo "Entering shell..."; sleep 30 ;;
+esac
+RISH
   printf '#!/bin/sh\n' > "$OPT/venv/bin/python3"; chmod +x "$OPT/venv/bin/python3"
   touch "$D/BOT_ENABLED"; echo "1:x" > "$OPT/token"; date +%s > "$OPT/heartbeat"
   echo $PID_charge > "$D/charge.pid"; echo $PID_bot > "$D/bot.pid"
-  printf '#!/bin/sh\n' > "$D/rish"; chmod +x "$D/rish"; touch "$D/rish_shizuku.dex"
+  chmod +x "$D/rish"; touch "$D/rish_shizuku.dex"
   printf '#!/bin/sh\ncase "$1" in "echo OK") [ "${FAKE_SHIZUKU:-1}" = 1 ] && echo OK ;; *bootstate*) cat "%s/android" ;; esac\n' "$T" > "$D/sa.sh"
   chmod +x "$D/sa.sh"
   android
@@ -48,7 +61,8 @@ setup() {     # a complete, healthy installation
 android() {   # android [key=value...]: the Shizuku report, healthy unless overridden
   local k
   declare -A A=([boot]=1 [bootstate]=stopped=false [bootnl]=notLaunched=false [api]=1 [idle]=1
-                [bg]="RUN_ANY_IN_BACKGROUND: allow" [bucket]=10 [phantom]=false [maxph]=null [wake]=1 [adbwifi]=1)
+                [bg]="RUN_ANY_IN_BACKGROUND: allow" [bucket]=10 [phantom]=false [maxph]=null [wake]=1 [adbwifi]=1
+                [shzidle]=1 [shzwss]=1 [cred]=NONE)
   for kv in "$@"; do A[${kv%%=*}]="${kv#*=}"; done
   : > "$T/android"; for k in "${!A[@]}"; do echo "$k=${A[$k]}" >> "$T/android"; done
 }
@@ -125,6 +139,29 @@ setup; FAKE_ARCH=x86_64 run
 check "untested CPU: WARN" yes "$(has "CPU x86_64: not tested")"
 setup; FAKE_SSHD=0 run
 check "sshd down: WARN" yes "$(has "sshd not running")"
+
+# Shizuku down: the cause found by shizuku.sh probe decides the advice
+setup; FAKE_SHIZUKU=0 FAKE_RISH=not-running run
+check "Shizuku service stopped: says Start, and that the watchdog retries" "yes yes" "$(has "service is stopped") $(has "the watchdog asks it to start by itself")"
+setup; sed -i /SHIZUKU_AUTH/d "$T/home/server/server.conf"; FAKE_SHIZUKU=0 FAKE_RISH=not-running run
+check "Shizuku stopped without SHIZUKU_AUTH: tells how to enable auto-start" yes "$(has "set SHIZUKU_AUTH")"
+setup; FAKE_SHIZUKU=0 FAKE_RISH=timeout run
+check "Shizuku app frozen: battery advice for Shizuku itself" yes "$(has "Settings > Apps > Shizuku > Battery")"
+setup; FAKE_SHIZUKU=0 FAKE_RISH=denied run
+check "Termux not authorised: says where to authorise it" yes "$(has "Authorized applications")"
+setup; FAKE_SHIZUKU=0 FAKE_RISH=dialog SHIZUKU_PROBE_TIMEOUT=1 run
+check "permission dialog waiting: says to tap Allow" yes "$(has "tap Allow")"
+# Shizuku up: what it needs to restart by itself
+setup; android shzwss=0; run
+check "Shizuku without WRITE_SECURE_SETTINGS: WARN with the pm grant command" yes "$(has "pm grant moe.shizuku.privileged.api")"
+setup; android shzidle=0; run
+check "Shizuku app battery-optimised: WARN" yes "$(has "the Shizuku app is under battery optimisation")"
+setup; sed -i /SHIZUKU_AUTH/d "$T/home/server/server.conf"; run
+check "no SHIZUKU_AUTH: WARN with where to find it" yes "$(has "View intents")"
+setup; android cred=PIN; run
+check "screen lock PIN: WARN that nothing starts after a reboot until unlocked" yes "$(has "NOTHING starts until someone unlocks")"
+setup; android cred=; run
+check "lock type unknown (format not found): no lock warning" no "$(has "screen lock")"
 
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

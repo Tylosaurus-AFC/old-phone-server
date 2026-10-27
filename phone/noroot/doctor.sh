@@ -92,8 +92,19 @@ if [ ! -x $D/rish ] || [ ! -f $D/rish_shizuku.dex ]; then
   warn "Shizuku not set up: no guardian if Android closes Termux, no reboot from the bot, battery restrictions cannot be checked" \
        "set up Shizuku (docs/*/12-*.md, step 4); meanwhile check Settings > Apps > Termux > Battery = Unrestricted by hand"
 elif [ "$($D/sa.sh 'echo OK')" != OK ]; then
-  warn "Shizuku does not answer: no guardian, no reboot from the bot" \
-       "open the Shizuku app and start it (wireless debugging must be on; enable its start on boot)"
+  P=$(bash $D/shizuku.sh probe 2>/dev/null); S=$(echo "$P" | sed -n 1p)
+  AUTO="the watchdog asks it to start by itself"; [ -n "${SHIZUKU_AUTH:-}" ] || AUTO="set SHIZUKU_AUTH (docs/*/14-*.md) so the watchdog can start it by itself"
+  case "$S" in
+    not-running) warn "Shizuku's service is stopped: no guardian, no reboot from the bot" \
+                      "open Shizuku > Start (Wi-Fi on; wireless debugging is turned on by Shizuku itself); $AUTO" ;;
+    app-unreachable) warn "the Shizuku app does not answer (frozen, force-stopped or uninstalled)" \
+                          "open Shizuku once; Settings > Apps > Shizuku > Battery > Unrestricted; $AUTO" ;;
+    not-authorized) warn "Termux is not authorised in Shizuku" "Shizuku > Authorized applications > turn on Termux" ;;
+    awaiting-permission) warn "Shizuku is showing a permission dialog on the screen" "unlock the phone and tap Allow (for Termux)" ;;
+    dex-writable) warn "Android refuses rish_shizuku.dex because it is writable" "chmod 400 ~/server/rish_shizuku.dex" ;;
+    *) warn "Shizuku does not answer (${S:-unknown}: $(echo "$P" | sed -n 2p))" \
+            "open the Shizuku app and start it; if it keeps failing see docs/*/14-*.md, Shizuku" ;;
+  esac
 else
   ok "Shizuku answers"
   Q=$($D/sa.sh 'echo "boot=$(pm list packages com.termux.boot 2>&1 | grep -c "package:com.termux.boot$")"
@@ -106,7 +117,10 @@ else
     echo "phantom=$(settings get global settings_enable_monitor_phantom_procs 2>&1)"
     echo "maxph=$(device_config get activity_manager max_phantom_processes 2>&1)"
     echo "wake=$(dumpsys power 2>&1 | grep -c "termux:service-wakelock")"
-    echo "adbwifi=$(settings get global adb_wifi_enabled 2>&1)"' | tr -d '\r')
+    echo "adbwifi=$(settings get global adb_wifi_enabled 2>&1)"
+    echo "shzidle=$(dumpsys deviceidle whitelist 2>&1 | grep -c ",moe.shizuku.privileged.api,")"
+    echo "shzwss=$(dumpsys package moe.shizuku.privileged.api 2>&1 | grep -c "WRITE_SECURE_SETTINGS: granted=true")"
+    echo "cred=$(dumpsys lock_settings 2>&1 | grep -m1 -ioE "CredentialType: *[A-Za-z_]+" | sed "s/.*: *//")"' | tr -d '\r')
   v() { echo "$Q" | sed -n "s/^$1=//p" | head -1; }
   if [ "$(v boot)" != 1 ]; then
     fail "Termux:Boot is not installed: nothing starts the server after a reboot" \
@@ -145,6 +159,18 @@ else
   if [ "$(v wake)" -ge 1 ] 2>/dev/null; then ok "Termux wake lock held (CPU stays awake with the screen off)"
   else warn "no Termux wake lock: the CPU may sleep with the screen off" \
             "run termux-wake-lock (the boot hook does it); the Termux notification must say 'wake lock held'"; fi
+  if [ "$(v shzwss)" -ge 1 ] 2>/dev/null; then ok "Shizuku can turn wireless debugging on by itself"
+  else warn "Shizuku lacks WRITE_SECURE_SETTINGS: it cannot start by itself at boot nor be restarted by the watchdog" \
+            "from a PC once: adb shell pm grant moe.shizuku.privileged.api android.permission.WRITE_SECURE_SETTINGS"; fi
+  [ "$(v shzidle)" -ge 1 ] 2>/dev/null || warn "the Shizuku app is under battery optimisation (rish then times out)" \
+       "Settings > Apps > Shizuku > Battery > Unrestricted (the watchdog also requests it)"
+  [ -n "${SHIZUKU_AUTH:-}" ] || warn "SHIZUKU_AUTH not set: if Shizuku stops, the watchdog cannot start it" \
+       "Shizuku > Settings > View intents: copy the 'auth' value into ~/server/server.conf as SHIZUKU_AUTH=..."
+  case "$(v cred | tr A-Z a-z)" in
+    pin|password|pattern|*pin*|*password*|*pattern*)
+      warn "screen lock with $(v cred): after any reboot NOTHING starts until someone unlocks the phone (Android keeps app data locked)" \
+           "for a dedicated server phone use Swipe/None (Settings > Security), or accept unlocking it after each reboot" ;;
+  esac
   [ "$(v adbwifi)" = 1 ] || warn "wireless debugging is off: Shizuku cannot restart by itself" \
                                  "turn it on (Developer options); the guardian keeps it on once Shizuku runs"
 fi

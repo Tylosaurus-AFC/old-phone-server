@@ -20,11 +20,13 @@ echo $$ > $D/bot.pid
 
 # Event for the bot's /historial (same format as health.py; no quotes inside the text)
 ev() { echo "{\"t\":$(date +%s),\"k\":\"$1\",\"x\":\"$2\"}" >> $EV; }
-# Internet check: TCP to port 53 of NET_HOSTS (server.conf; default two public DNS servers)
+# Internet check: TCP to NET_HOSTS (server.conf; default two public DNS servers, port 53;
+# "host:port" for another port, e.g. your router's 192.168.1.1:80)
 online() {
   local h
   for h in ${NET_HOSTS:-1.1.1.1 8.8.8.8}; do
-    timeout 5 bash -c "</dev/tcp/$h/53" 2>/dev/null && return 0
+    case $h in *:*) ;; *) h=$h:53 ;; esac
+    timeout 5 bash -c "</dev/tcp/${h%:*}/${h##*:}" 2>/dev/null && return 0
   done
   return 1
 }

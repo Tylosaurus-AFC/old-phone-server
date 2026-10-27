@@ -24,8 +24,9 @@ NIGHTLY=""
 # The Backups folder is NOT served by the webdav/dlna extras (it holds the bot token).
 WEEKLY_BACKUP=0
 
-# Internet check used by charge.sh and bot.sh: TCP to port 53 of these hosts (any one
-# answering = online). Change it if your network blocks public DNS servers, e.g. your router.
+# Internet check used by charge.sh and bot.sh: TCP to these hosts, port 53 unless written
+# host:port (any one answering = online). Change it if your network blocks public DNS
+# servers, e.g. NET_HOSTS="192.168.1.1:80" (your router's web page).
 #NET_HOSTS="1.1.1.1 8.8.8.8"
 
 # Through Shizuku, every 30 min the watchdog re-applies what keeps Android from freezing or
@@ -33,3 +34,8 @@ WEEKLY_BACKUP=0
 # bucket, and Android 12+'s phantom-process killer off. 0 = do not touch these settings.
 # See docs/*/14-*.md.
 #KEEPALIVE=1
+
+# Automatic restart of Shizuku (thedjchi fork) when its service stops. Copy the value of
+# "auth" from Shizuku > Settings > View intents. Without it the watchdog can only tell you
+# that Shizuku stopped. Keep it private (it lets any app start/stop Shizuku).
+#SHIZUKU_AUTH=

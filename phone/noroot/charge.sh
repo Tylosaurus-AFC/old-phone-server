@@ -38,11 +38,13 @@ HUNG=300            # seconds without heartbeat = bot frozen
 log() { echo "$(date) [$1] $2" >> $LOG; }
 # Event for the bot's /historial (same format as health.py; no quotes inside the text)
 ev() { echo "{\"t\":$(date +%s),\"k\":\"$1\",\"x\":\"$2\"}" >> $EV; }
-# Internet check: TCP to port 53 of NET_HOSTS (server.conf; default two public DNS servers)
+# Internet check: TCP to NET_HOSTS (server.conf; default two public DNS servers, port 53;
+# "host:port" for another port, e.g. your router's 192.168.1.1:80)
 online() {
   local h
   for h in ${NET_HOSTS:-1.1.1.1 8.8.8.8}; do
-    timeout 5 bash -c "</dev/tcp/$h/53" 2>/dev/null && return 0
+    case $h in *:*) ;; *) h=$h:53 ;; esac
+    timeout 5 bash -c "</dev/tcp/${h%:*}/${h##*:}" 2>/dev/null && return 0
   done
   return 1
 }
@@ -67,37 +69,95 @@ detached() { timeout -s KILL 20 $D/rish -c "setsid sh -c '$1' </dev/null >/dev/n
 # allowed, "active" standby bucket, and the child-process killer off (Android 12L+: a
 # setting; Android 12: a device_config limit that Google Play services may reset, so it is
 # simply set again every 30 min instead of disabling the config sync).
+# The Shizuku app itself is exempted too: when Android freezes it, rish times out.
+# After applying, the values are read back in the same call: a setting Android or the maker
+# refuses is reported once (event "aviso") and then retried less and less often (30 min,
+# 1 h, 2 h... up to 6 h) instead of hammering it every pass.
 keepalive() {
-  sa '# keepalive
-      for p in com.termux com.termux.boot com.termux.api; do dumpsys deviceidle whitelist +$p 2>&1 | cat; done
+  local out bad=""
+  out=$(sa '# keepalive
+      for p in com.termux com.termux.boot com.termux.api moe.shizuku.privileged.api; do dumpsys deviceidle whitelist +$p 2>&1 | cat; done
       cmd appops set com.termux RUN_ANY_IN_BACKGROUND allow 2>&1 | cat
       am set-standby-bucket com.termux active 2>&1 | cat
       S=$(getprop ro.build.version.sdk)
       if [ "$S" -ge 32 ]; then settings put global settings_enable_monitor_phantom_procs false 2>&1 | cat
-      elif [ "$S" = 31 ]; then device_config put activity_manager max_phantom_processes 2147483647 2>&1 | cat; fi' >/dev/null
+      elif [ "$S" = 31 ]; then device_config put activity_manager max_phantom_processes 2147483647 2>&1 | cat; fi
+      echo "chk_sdk=$S"
+      echo "chk_idle=$(dumpsys deviceidle whitelist 2>&1 | grep -c ",com.termux,")"
+      echo "chk_bg=$(cmd appops get com.termux RUN_ANY_IN_BACKGROUND 2>&1 | head -1)"
+      echo "chk_phantom=$(settings get global settings_enable_monitor_phantom_procs 2>&1)"
+      echo "chk_maxph=$(device_config get activity_manager max_phantom_processes 2>&1)"' | tr -d '\r')
+  kv() { echo "$out" | sed -n "s/^chk_$1=//p" | head -1; }
+  [ -z "$out" ] && return 0                    # no answer: Shizuku went away meanwhile
+  [ "$(kv idle)" -ge 1 ] 2>/dev/null || bad="$bad exención de batería de Termux,"
+  case "$(kv bg)" in *ignore*|*deny*) bad="$bad actividad en segundo plano," ;; esac
+  S=$(kv sdk)
+  if [ "${S:-0}" -ge 32 ] 2>/dev/null; then [ "$(kv phantom)" = false ] || bad="$bad límite de procesos de Android,"
+  elif [ "$S" = 31 ]; then [ "$(kv maxph)" -ge 1000 ] 2>/dev/null || bad="$bad límite de procesos de Android,"; fi
+  if [ -n "$bad" ]; then
+    KEEP_FAIL=$((KEEP_FAIL + 1))
+    [ $KEEP_FAIL = 1 ] && ev aviso "Android no aceptó:${bad%,} (ver doctor.sh)"
+    return 1
+  fi
+  [ $KEEP_FAIL -gt 0 ] && ev adb "ajustes anti-cierre aplicados por fin"
+  KEEP_FAIL=0
 }
 
-NETFAIL=0 NETDOWN=0 HUNG_UNTIL=0 WAS="" ADBWAS="" KEEP_AT=0
+# Shizuku state, for the bot (/salud, alerts) and doctor.sh: $SYS/shizuku (key=value).
+# When it is down: why (shizuku.sh probe), checks only every 5 min after the first 10 min
+# (each failed check costs ~40 s of rish time-outs), and, if SHIZUKU_AUTH is set, asks the
+# fork to start itself with growing gaps (2, 5, 10, 30 min, then every 30 min), never
+# during the first 5 min after boot (the fork starts by itself then) nor while offline.
+shizuku_check() {
+  adb_find; HAVE=$?
+  if [ $HAVE = 0 ]; then
+    SHZ_STATE=ok SHZ_DETAIL="" SHZ_SINCE=0 SHZ_TRIES=0 SHZ_TRY_AT=0 SHZ_CHECK_AT=0
+  else
+    P=$(bash $D/shizuku.sh probe 2>/dev/null)          # one rish call: state + detail
+    SHZ_STATE=$(echo "$P" | sed -n 1p); SHZ_STATE=${SHZ_STATE:-unknown}
+    SHZ_DETAIL=$(echo "$P" | sed -n 2p | tr -d '"\\')
+    [ "$SHZ_STATE" = ok ] && SHZ_STATE=flaky       # rish answered but sa.sh did not
+    [ $SHZ_SINCE = 0 ] && SHZ_SINCE=$NOW
+    [ $((NOW - SHZ_SINCE)) -ge 600 ] && SHZ_CHECK_AT=$((NOW + 300))
+    case "$SHZ_STATE" in
+      not-running|app-unreachable)
+        if [ -n "${SHIZUKU_AUTH:-}" ] && [ $NOW -ge $SHZ_TRY_AT ] && [ $((NOW - BOOT0)) -ge 300 ] && online; then
+          SHZ_TRIES=$((SHZ_TRIES + 1))
+          if bash $D/shizuku.sh start; then ev adb "Shizuku parado ($SHZ_STATE): le pido que arranque (intento $SHZ_TRIES)"
+          else ev aviso "no pude mandar la orden de arranque a Shizuku (intento $SHZ_TRIES)"; fi
+          case $SHZ_TRIES in 1) G=120 ;; 2) G=300 ;; 3) G=600 ;; *) G=1800 ;; esac
+          SHZ_TRY_AT=$((NOW + G))
+        fi ;;
+    esac
+  fi
+  printf 'state=%s\nsince=%s\ntries=%s\nauth=%s\nchecked=%s\nboot=%s\ndetail=%s\n' "$SHZ_STATE" "$SHZ_SINCE" \
+    "$SHZ_TRIES" "$([ -n "${SHIZUKU_AUTH:-}" ] && echo 1 || echo 0)" "$NOW" "$BOOT0" "$SHZ_DETAIL" > $SYS/shizuku.tmp \
+    && mv $SYS/shizuku.tmp $SYS/shizuku
+}
+
+NETFAIL=0 NETDOWN=0 HUNG_UNTIL=0 WAS="" ADBWAS="" KEEP_AT=0 KEEP_FAIL=0 HAVE=1
+SHZ_STATE=unknown SHZ_DETAIL="" SHZ_SINCE=0 SHZ_TRIES=0 SHZ_TRY_AT=0 SHZ_CHECK_AT=0
 DOC_AT=$(( $(date +%s) - 3000 ))   # first check 10 min after start: Shizuku needs time at boot
 BOOT0=$(cat $D/boot_time 2>/dev/null || date +%s)
 
 while true; do
   NOW=$(date +%s)
   [ -f $D/server.conf ] && . $D/server.conf
-  adb_find; HAVE=$?
+  [ $NOW -ge $SHZ_CHECK_AT ] && shizuku_check
   if [ "$HAVE" != "$ADBWAS" ]; then
     if [ "$HAVE" = 0 ]; then
       ev adb "Shizuku disponible: hay control del sistema"
       # No Doze and Wi-Fi always on (Android forgets this on reboot)
       sa 'dumpsys deviceidle disable 2>&1 | cat; settings put global wifi_sleep_policy 2 2>&1 | cat' >/dev/null
     else
-      ev adb "Shizuku no responde: /reiniciar del móvil no disponible"
+      ev adb "Shizuku no responde ($SHZ_STATE): /reiniciar del móvil no disponible"
     fi
     ADBWAS=$HAVE
     KEEP_AT=0                     # Shizuku (re)appeared: apply the keep-alive settings now
   fi
-  if [ $HAVE = 0 ] && [ "${KEEPALIVE:-1}" != 0 ] && [ $((NOW - KEEP_AT)) -ge 1800 ]; then
-    keepalive; KEEP_AT=$NOW
+  if [ $HAVE = 0 ] && [ "${KEEPALIVE:-1}" != 0 ] && [ $NOW -ge $KEEP_AT ]; then
+    if keepalive; then KEEP_AT=$((NOW + 1800))
+    else G=$((1800 << (KEEP_FAIL > 4 ? 4 : KEEP_FAIL - 1))); [ $G -gt 21600 ] && G=21600; KEEP_AT=$((NOW + G)); fi
   fi
   # Health check (doctor.sh) every hour, for the bot's /salud and /diagnostico
   if [ $((NOW - DOC_AT)) -ge 3600 ] && [ -x $D/doctor.sh ]; then
@@ -275,6 +335,7 @@ while true; do
       NETFAIL=0; NETDOWN=1
     fi
   fi
-  [ -n "$ONCE" ] && break
+  # ONCE=N: N passes and stop (tests; ONCE=1 = a single pass)
+  if [ -n "$ONCE" ]; then ONCE=$((ONCE - 1)); [ $ONCE -le 0 ] && break; fi
   sleep 60
 done
