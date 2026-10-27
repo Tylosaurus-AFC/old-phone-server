@@ -387,6 +387,45 @@ class Buttons(unittest.TestCase):
         self.assertEqual(len(self.answered), 1)
 
 
+class NoRootDoctor(unittest.TestCase):
+    """doctor.txt (written hourly by the no-root charge.sh) in /salud and /diagnostico."""
+    REPORT = ("RESULT: broken (1 fail, 1 warn) 2026-10-27 10:00\n"
+              "OK   Android 14 (SDK 34), realme\n"
+              "WARN 800 MB free\n     -> keep at least 1 GB free\n"
+              "FAIL Termux is under battery optimisation: Android may freeze it\n"
+              "     -> Settings > Apps > Termux > Battery > Unrestricted\n")
+
+    def setUp(self):
+        (BASE / "sys").mkdir(exist_ok=True)
+        self.orig = bot.http.get
+        def offline(*a, **k):
+            raise bot.requests.ConnectionError("offline")
+        bot.http.get = offline
+
+    def tearDown(self):
+        bot.http.get = self.orig
+        (BASE / "sys" / "doctor.txt").unlink(missing_ok=True)
+
+    def test_salud_shows_the_worst_problem_first(self):
+        (BASE / "sys" / "doctor.txt").write_text(self.REPORT)
+        line = [l for l in bot.health_text().splitlines() if "Android/Termux" in l][0]
+        self.assertIn("❌", line)
+        self.assertIn("battery optimisation", line)
+        self.assertIn("+1 más", line)
+
+    def test_salud_ok(self):
+        (BASE / "sys" / "doctor.txt").write_text("RESULT: ok (0 fail, 0 warn) x\nOK   a\n")
+        line = [l for l in bot.health_text().splitlines() if "Android/Termux" in l][0]
+        self.assertIn("✅", line)
+
+    def test_root_mode_has_no_line(self):
+        self.assertFalse([l for l in bot.health_text().splitlines() if "Android/Termux" in l])
+
+    def test_diagnostico_includes_the_report(self):
+        (BASE / "sys" / "doctor.txt").write_text(self.REPORT)
+        self.assertIn("under battery optimisation", bot.diag.report())
+
+
 def tearDownModule():
     shutil.rmtree(_tmp, ignore_errors=True)
 

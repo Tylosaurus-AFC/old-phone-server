@@ -58,7 +58,24 @@ adb_find() { [ "$(sa 'echo OK')" = OK ]; }
 export RISH_APPLICATION_ID=com.termux
 detached() { timeout -s KILL 20 $D/rish -c "setsid sh -c '$1' </dev/null >/dev/null 2>&1 &" </dev/null >/dev/null 2>&1; }
 
-NETFAIL=0 NETDOWN=0 HUNG_UNTIL=0 WAS="" ADBWAS=""
+# Keep Android from freezing or killing Termux (KEEPALIVE=0 in server.conf turns it off). The
+# same settings docs/*/12-*.md asks for by hand, re-applied because Android and the phone
+# maker can undo them: no battery optimisation for the Termux apps, background activity
+# allowed, "active" standby bucket, and the child-process killer off (Android 12L+: a
+# setting; Android 12: a device_config limit that Google Play services may reset, so it is
+# simply set again every 30 min instead of disabling the config sync).
+keepalive() {
+  sa '# keepalive
+      for p in com.termux com.termux.boot com.termux.api; do dumpsys deviceidle whitelist +$p 2>&1 | cat; done
+      cmd appops set com.termux RUN_ANY_IN_BACKGROUND allow 2>&1 | cat
+      am set-standby-bucket com.termux active 2>&1 | cat
+      S=$(getprop ro.build.version.sdk)
+      if [ "$S" -ge 32 ]; then settings put global settings_enable_monitor_phantom_procs false 2>&1 | cat
+      elif [ "$S" = 31 ]; then device_config put activity_manager max_phantom_processes 2147483647 2>&1 | cat; fi' >/dev/null
+}
+
+NETFAIL=0 NETDOWN=0 HUNG_UNTIL=0 WAS="" ADBWAS="" KEEP_AT=0
+DOC_AT=$(( $(date +%s) - 3000 ))   # first check 10 min after start: Shizuku needs time at boot
 BOOT0=$(cat $D/boot_time 2>/dev/null || date +%s)
 
 while true; do
@@ -74,6 +91,15 @@ while true; do
       ev adb "Shizuku no responde: /reiniciar del móvil no disponible"
     fi
     ADBWAS=$HAVE
+    KEEP_AT=0                     # Shizuku (re)appeared: apply the keep-alive settings now
+  fi
+  if [ $HAVE = 0 ] && [ "${KEEPALIVE:-1}" != 0 ] && [ $((NOW - KEEP_AT)) -ge 1800 ]; then
+    keepalive; KEEP_AT=$NOW
+  fi
+  # Health check (doctor.sh) every hour, for the bot's /salud and /diagnostico
+  if [ $((NOW - DOC_AT)) -ge 3600 ] && [ -x $D/doctor.sh ]; then
+    $D/doctor.sh > $SYS/doctor.txt.tmp 2>&1; mv $SYS/doctor.txt.tmp $SYS/doctor.txt
+    DOC_AT=$NOW
   fi
   # Shell-side guardian (guard.sh): if Android closes Termux, it opens it again. Relaunched
   # every 10 min in case Shizuku restarted (it exits by itself if one is already running).

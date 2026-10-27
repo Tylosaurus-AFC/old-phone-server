@@ -2417,6 +2417,15 @@ def health_text():
     free = shutil.disk_usage("/").free / 2**30
     lines.append(_check("Batería y disco", True if temp < 40 and free > 2 else None,
                         f"{read_sys(bat + '/capacity')}% · {temp:.1f} °C · {free:.1f} GB libres"))
+    doc = read_sys(str(BASE / "sys" / "doctor.txt"), "")      # solo en modo sin root
+    if doc.startswith("RESULT:"):
+        state = doc.split()[1]
+        bad = [l[5:] for l in doc.splitlines() if l.startswith("FAIL ")] + \
+              [l[5:] for l in doc.splitlines() if l.startswith("WARN ")]     # lo peor primero
+        lines.append(_check("Android/Termux", {"ok": True, "degraded": None}.get(state, False),
+                            "todo en orden" if state == "ok" else
+                            html.escape(bad[0][:150] if bad else state) +
+                            (f" (+{len(bad) - 1} más; /diagnostico)" if len(bad) > 1 else "")))
     backup = read_sys(str(BASE / "last_backup"), "")
     if backup.isdigit():
         b_age = now - int(backup)

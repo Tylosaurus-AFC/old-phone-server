@@ -16,5 +16,6 @@ echo "== backup/restore lists in sync =="; bash tests/test_backup_lists.sh
 echo "== PC tools with fake adb/ssh =="; bash tests/test_tools.sh
 echo "== charge.sh against a fake battery =="; bash tests/test_charge.sh
 echo "== no-root charge.sh with a fake Shizuku =="; bash tests/test_noroot.sh
+echo "== no-root doctor.sh in a fake Termux =="; bash tests/test_doctor.sh
 echo "== bot.sh back-off and start.sh boot sequence =="; bash tests/test_services.sh
 echo "== bot, plugins, helpers =="; "${PYTHON:-python3}" tests/test_bot.py

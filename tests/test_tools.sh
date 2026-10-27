@@ -153,5 +153,10 @@ check "noroot-backup: works" 0 "$RC"
 check "noroot-backup: asks for bot.db too" yes "$(has "$T/ssh.log" "bot.db")"
 check "noroot-backup: files land in backup/<date>/" yes "$(ls "$R"/backup/*/token >/dev/null 2>&1 && echo yes || echo no)"
 
+conf "${BASE_CONF[@]}"; run noroot-doctor.sh
+check "noroot-doctor: runs ~/server/doctor.sh over SSH" "0 yes" "$RC $(has "$T/ssh.log" "bash ~/server/doctor.sh")"
+FAKE_SSH_DOWN=1 run noroot-doctor.sh
+check "noroot-doctor: phone unreachable: clear message" "1 yes" "$RC $(has "$T/out" "Cannot reach the phone over SSH")"
+
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

@@ -26,7 +26,7 @@ setup() {    # setup <conf lines...>; plain battery/Wi-Fi report in $T/out
   OPT="$T/prefix/var/lib/proot-distro/containers/bot/rootfs/opt/bot"; mkdir -p "$OPT"
   printf '%s\n' "$@" > "$T/home/server/server.conf"
   # fake sa.sh: "echo OK" -> OK; the big status query -> $T/out
-  printf '#!/bin/sh\ncase "$1" in "echo OK") echo OK ;; *capacity*) cat "%s/out" ;; esac\n' "$T" > "$T/home/server/sa.sh"
+  printf '#!/bin/sh\ncase "$1" in "echo OK") echo OK ;; *capacity*) cat "%s/out" ;; *"# keepalive"*) echo "$1" >> "%s/keepalive.log" ;; esac\n' "$T" "$T" > "$T/home/server/sa.sh"
   chmod +x "$T/home/server/sa.sh"
 }
 report() {   # report <capacity> <status> <plug> <voltage> <limit> <vol>
@@ -105,6 +105,31 @@ check "disk mounted: service a started" started "$r"
 [ -f "$T/svc-b" ] && r=started || r=not-started
 check "no-b file: service b disabled" not-started "$r"
 check "disk id handed to enter.sh" "ABCD-1234" "$(O sys/disk)"
+
+# Keep-alive settings through Shizuku: applied when Shizuku answers, unless KEEPALIVE=0
+setup "OEM=" "NET_HOSTS=127.0.0.1"
+report 50 Charging 10 4200 "80 1" ""
+rm -f "$T/keepalive.log"; run
+check "keepalive: applied when Shizuku answers" yes "$(grep -q 'deviceidle whitelist +$p' "$T/keepalive.log" 2>/dev/null && echo yes || echo no)"
+check "keepalive: covers the phantom process killer (12L+ and 12)" "yes yes" \
+  "$(grep -q settings_enable_monitor_phantom_procs "$T/keepalive.log" && echo yes || echo no) $(grep -q max_phantom_processes "$T/keepalive.log" && echo yes || echo no)"
+check "keepalive: never disables Android's config sync" no "$(grep -q set_sync_disabled "$T/keepalive.log" && echo yes || echo no)"
+setup "OEM=" "NET_HOSTS=127.0.0.1" "KEEPALIVE=0"
+rm -f "$T/keepalive.log"; run
+check "KEEPALIVE=0: nothing applied" no "$([ -f "$T/keepalive.log" ] && echo yes || echo no)"
+
+# boot.sh: running it again (Termux reopened) must not start a second watchdog loop
+setup "OEM=" "NET_HOSTS=127.0.0.1"
+printf '#!/bin/sh\nexit 0\n' > "$S/sshd"; chmod +x "$S/sshd"
+printf '#!/bin/sh\nsleep 1\n' > "$T/home/server/charge.sh"; chmod +x "$T/home/server/charge.sh"
+boot() { HOME="$T/home" PREFIX="$T/prefix" PATH="$S:$PATH" sh "$HERE/phone/noroot/boot.sh" >/dev/null 2>&1; }
+loops() { n=0; for p in $(pgrep -f "[w]hile true; do $T/home/server/charge.sh" 2>/dev/null); do n=$((n + 1)); done; echo $n; }
+boot; sleep 0.5; boot; sleep 0.5; boot; sleep 0.5
+check "boot.sh run 3 times: one watchdog loop" 1 "$(loops)"
+kill $(cat "$T/home/server/loop.pid") 2>/dev/null; sleep 0.3
+boot; sleep 0.5
+check "boot.sh after the loop died: starts a new one" 1 "$(loops)"
+kill $(cat "$T/home/server/loop.pid") 2>/dev/null
 
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

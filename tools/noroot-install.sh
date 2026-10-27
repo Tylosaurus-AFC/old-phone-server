@@ -49,7 +49,7 @@ provision)
 scripts)
   # (staged and pushed with scp; modes set on the phone)
   S="$(mktemp -d)"
-  cp "$ROOT"/phone/noroot/{boot.sh,bot.sh,charge.sh,enter.sh,guard.sh,sa.sh,ui.sh} "$S/"
+  cp "$ROOT"/phone/noroot/{boot.sh,bot.sh,charge.sh,doctor.sh,enter.sh,guard.sh,sa.sh,ui.sh} "$S/"
   cp "$ROOT/phone/noroot/server.conf.example" "$S/server.conf.new"
   mkdir -p "$S/extras"; cp "$ROOT"/phone/noroot/extras/*.sh "$S/extras/"
   ph 'rm -rf ~/server-new; mkdir -p ~/server-new ~/server/extras ~/server/svc'
@@ -57,7 +57,7 @@ scripts)
   rm -rf "$S"
   ph 'set -e
       cd ~/server-new
-      for s in boot.sh bot.sh charge.sh enter.sh guard.sh sa.sh ui.sh; do
+      for s in boot.sh bot.sh charge.sh doctor.sh enter.sh guard.sh sa.sh ui.sh; do
         cp $s ~/server/$s && chmod 700 ~/server/$s
       done
       cp extras/*.sh ~/server/extras/ && chmod 700 ~/server/extras/*.sh

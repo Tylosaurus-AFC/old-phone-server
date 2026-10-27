@@ -8,7 +8,7 @@ need_phone
 
 S="$(mktemp -d)"; mkdir -p "$S/plugins" "$S/extras"
 cp "$ROOT"/bot/*.py "$ROOT/bot/requirements.txt" "$S/"
-cp "$ROOT"/phone/noroot/{boot.sh,bot.sh,charge.sh,enter.sh,guard.sh,sa.sh,ui.sh} "$S/"
+cp "$ROOT"/phone/noroot/{boot.sh,bot.sh,charge.sh,doctor.sh,enter.sh,guard.sh,sa.sh,ui.sh} "$S/"
 cp "$ROOT"/phone/noroot/extras/*.sh "$S/extras/"
 [ -f "$ROOT/device.json" ] && cp "$ROOT/device.json" "$S/"
 cp "$ROOT"/extras/plugins/_*.py "$S/plugins/" 2>/dev/null || true
@@ -32,7 +32,7 @@ cp $T/*.py $T/requirements.txt $OPT/
 rm -f $OPT/plugins/*.py; cp $T/plugins/*.py $OPT/plugins/ 2>/dev/null || true
 # The .sh files run in loops: copy aside and rename (new inode) so the running copies are
 # not changed under their feet; the old processes keep their own version.
-for s in boot.sh bot.sh charge.sh enter.sh guard.sh sa.sh ui.sh; do
+for s in boot.sh bot.sh charge.sh doctor.sh enter.sh guard.sh sa.sh ui.sh; do
   cp $T/$s $D/$s.new && chmod 700 $D/$s.new && mv $D/$s.new $D/$s
 done
 cp $T/extras/*.sh $D/extras/ && chmod 700 $D/extras/*.sh

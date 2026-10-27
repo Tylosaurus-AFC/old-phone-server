@@ -138,6 +138,9 @@ def report():
                          f"[{e['k']}] {e['x']}")
         except (ValueError, KeyError, TypeError):
             continue
+    doc = _read(BASE / "sys" / "doctor.txt")
+    if doc:
+        lines += ["", "== modo sin root: ~/server/doctor.sh (última hora) =="] + doc.splitlines()
     for name in ("bot.log", "service.log"):
         lines += ["", f"== final de {name} =="] + _tail(BASE / name)
     return redact("\n".join(lines)) + "\n"
