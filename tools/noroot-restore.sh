@@ -14,7 +14,7 @@ need_phone
 FILES=""
 for f in token api.txt cookies.txt owners users.json subs.json cache.json stats.json channels.json likes.json \
          mtproto.session ytmusic_cookies.txt lastfm.json scrobble_state.json camaras.json stt.json \
-         voicemonkey.json; do
+         voicemonkey.json device.json bot.db; do
   [ -f "$SRC/$f" ] && FILES="$FILES $f"
 done
 echo "Restoring:$FILES"

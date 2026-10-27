@@ -28,7 +28,7 @@ Day-to-day commands, run from the repository on your PC.
 
 Backups are interchangeable between modes. **Migrating** (e.g. from a rooted old phone to a no-root modern one):
 make a fresh backup on the old phone while it still runs → switch the bot **off** there → `tools/noroot-restore.sh
-backup/<date>` on the new one (it copies token, API keys, cookies, owners, followed channels, cache, MTProto session,
+backup/<date>` on the new one (it copies token, API keys, cookies, owners, followed YouTube channels, your Telegram channels (`channels.json`), cache and stats (`bot.db`), plugin state, MTProto session,
 likes/Last.fm state… and starts the bot) → check `/estado`, `/salud` and one link.
 
 ## Updating

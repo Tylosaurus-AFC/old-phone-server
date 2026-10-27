@@ -20,7 +20,9 @@ for f in *; do
   case \$f in
     server.conf) cp \$f $DEBIAN/ ;;
     pip-freeze.txt) continue ;;
-    *) cp \$f $DEBIAN/fs/opt/bot/ && chmod 600 $DEBIAN/fs/opt/bot/\$f ;;
+    # temp copy + mv: the running bot never reads a half-written file (bot.db above all)
+    *) cp \$f $DEBIAN/fs/opt/bot/.\$f.rst && chmod 600 $DEBIAN/fs/opt/bot/.\$f.rst \
+         && mv $DEBIAN/fs/opt/bot/.\$f.rst $DEBIAN/fs/opt/bot/\$f ;;
   esac
   n=\$((n + 1))
 done

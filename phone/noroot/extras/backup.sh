@@ -15,7 +15,7 @@ F=$R/bot-$(date +%Y%m%d).tgz
 T=$(mktemp -d)
 cd $OPT && cp $(ls token api.txt cookies.txt owners users.json subs.json cache.json mtproto.session \
   camaras.json stt.json lastfm.json scrobble_state.json ytmusic_cookies.txt voicemonkey.json \
-  device.json stats.json bot.db 2>/dev/null) $T/
+  device.json stats.json bot.db channels.json likes.json 2>/dev/null) $T/
 cp ~/.config/server/webdav.pass $T/ 2>/dev/null
 tar -czf $F.tmp -C $T . && mv $F.tmp $F || { rm -rf $T $F.tmp; echo "backup failed"; exit 1; }
 rm -rf $T

@@ -10,7 +10,7 @@ mkdir -p "$DEST/android"
 
 FILES="token api.txt cookies.txt owners users.json subs.json cache.json stats.json channels.json likes.json
        mtproto.session ytmusic_cookies.txt lastfm.json scrobble_state.json camaras.json stt.json
-       voicemonkey.json device.json"
+       voicemonkey.json device.json bot.db"
 FILES=$(echo $FILES)    # one line (it goes inside a remote command)
 OPT='$PREFIX/var/lib/proot-distro/containers/'"$CONTAINER"'/rootfs/opt/bot'
 ph "cd $OPT && date +%s > last_backup && tar -cf - \$(ls $FILES 2>/dev/null)" | tar -xf - -C "$DEST"

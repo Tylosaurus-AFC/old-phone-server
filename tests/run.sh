@@ -9,6 +9,10 @@ echo "== no secrets committed =="
 if git ls-files -z 2>/dev/null | xargs -0 grep -nIE '[0-9]{8,10}:AA[A-Za-z0-9_-]{33}|BEGIN [A-Z ]*PRIVATE KEY' 2>/dev/null; then
   echo "FAIL: possible secret above"; exit 1
 fi; echo ok
+echo "== python: undefined names and syntax (ruff, if installed) =="
+if command -v ruff >/dev/null 2>&1; then ruff check -q --select F821,F811,E9 bot extras tests && echo ok
+else echo "skipped (pip install ruff)"; fi
+echo "== backup/restore lists in sync =="; bash tests/test_backup_lists.sh
 echo "== charge.sh against a fake battery =="; bash tests/test_charge.sh
 echo "== no-root charge.sh with a fake Shizuku =="; bash tests/test_noroot.sh
 echo "== bot.sh back-off and start.sh boot sequence =="; bash tests/test_services.sh

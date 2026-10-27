@@ -348,6 +348,45 @@ class Diagnostics(unittest.TestCase):
         self.assertNotIn("TEST-TOKEN", sent[0][1])
 
 
+class Buttons(unittest.TestCase):
+    """Inline buttons: the order goes through on_message as if typed by whoever pressed."""
+    def setUp(self):
+        SAID.clear()
+        self.queued, self.answered = [], []
+        self.orig = (bot.tg, bot.enqueue)
+        bot.tg = lambda method, **k: self.answered.append((method, k)) or {}
+        bot.enqueue = lambda msg, chat, user, urls, text, mode="video": \
+            self.queued.append((chat, user.get("id"), urls, mode))
+
+    def tearDown(self):
+        bot.tg, bot.enqueue = self.orig
+
+    def cb(self, data, uid=1, chat=100, ctype="private"):
+        video = {"message_id": 42, "chat": {"id": chat, "type": ctype},
+                 "caption": "Título", "caption_entities": [
+                     {"type": "text_link", "offset": 0, "length": 6, "url": "https://x.com/a/1"}]}
+        return {"id": "cbid", "from": {"id": uid, "first_name": "T"}, "message": video, "data": data}
+
+    def test_mp3_button_queues_the_link_of_the_video(self):
+        bot.on_button(self.cb("/mp3"))
+        self.assertEqual(self.queued, [(100, 1, ["https://x.com/a/1"], "mp3")])
+        self.assertEqual(self.answered[0][0], "answerCallbackQuery")
+
+    def test_owner_button_pressed_by_other_user_does_nothing(self):
+        bot.on_button(self.cb("/stats hoy", uid=2))
+        self.assertEqual(SAID, [])
+
+    def test_button_from_unauthorised_chat_is_ignored(self):
+        bot.on_button(self.cb("/mp3", chat=555, ctype="group"))
+        self.assertEqual(self.queued, [])
+
+    def test_button_without_message_is_only_answered(self):
+        cb = self.cb("/mp3"); del cb["message"]
+        bot.on_button(cb)
+        self.assertEqual(self.queued, [])
+        self.assertEqual(len(self.answered), 1)
+
+
 def tearDownModule():
     shutil.rmtree(_tmp, ignore_errors=True)
 

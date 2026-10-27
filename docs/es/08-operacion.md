@@ -50,7 +50,7 @@ estado de likes/Last.fm… y arranca el bot) → comprueba `/estado`, `/salud` y
 
 | Qué | Comando | Contiene | Guárdalo… |
 |---|---|---|---|
-| Configuración | `tools/backup.sh` | token, claves de API, cookies, dueños, canales seguidos, caché, `server.conf`, los archivos de Android que cambiaste, la lista de apps desactivadas | **en privado** — lleva secretos |
+| Configuración | `tools/backup.sh` | token, claves de API, cookies, dueños, canales de YouTube seguidos, tus canales de Telegram (`channels.json`), caché y estadísticas (`bot.db`), estado de los plugins, `server.conf`, los archivos de Android que cambiaste, la lista de apps desactivadas | **en privado** — lleva secretos |
 | Todo el Debian | `tools/make-image.sh` | el chroot completo (bot, venv, Whisper…) **sin** secretos | compartible; ~1–1,5 GB |
 | Código | git | este repositorio | público |
 

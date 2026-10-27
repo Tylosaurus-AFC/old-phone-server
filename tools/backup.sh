@@ -14,6 +14,7 @@ remote <<EOF
 T=$TMP.bk; rm -rf \$T; mkdir -p \$T
 cd $DEBIAN/fs/opt/bot
 for f in token api.txt cookies.txt owners users.json subs.json cache.json stats.json \
+         channels.json likes.json bot.db \
          mtproto.session ytmusic_cookies.txt lastfm.json scrobble_state.json camaras.json \
          voicemonkey.json stt.json device.json; do
   [ -f \$f ] && cp \$f \$T/

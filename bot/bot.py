@@ -3076,6 +3076,23 @@ def on_message(msg):
             say(chat, "Mándame un enlace, o escribe /help para ver qué hago.")
 
 
+def on_button(cb):
+    """Pulsacion de un boton en linea (ver keyboard()): su orden se trata como un mensaje
+    escrito por quien pulsa, con los mismos permisos, y como respuesta al mensaje del
+    boton (asi /mp3, /original y /guardar encuentran el enlace de su titulo)."""
+    try:
+        tg("answerCallbackQuery", callback_query_id=cb["id"])   # quita el reloj del boton
+    except Exception as e:
+        log.info("answerCallbackQuery: %s", e)
+    m, data = cb.get("message"), cb.get("data") or ""
+    if not m or not data.startswith("/"):
+        return              # mensaje demasiado viejo (Telegram no lo manda) o dato ajeno
+    try:
+        on_message({"message_id": m["message_id"], "chat": m["chat"],
+                    "from": cb.get("from", {}), "text": data, "reply_to_message": m})
+    except Exception:
+        log.exception("on_button")
+
 def main():
     shutil.rmtree(JOBS, ignore_errors=True)   # restos de descargas cortadas
     migrate_to_sqlite()
