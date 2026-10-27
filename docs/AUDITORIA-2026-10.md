@@ -37,6 +37,7 @@ tiene el detalle). Revisión hecha **sin teléfono**: todo sale de leer el códi
 | 17 | Alta | Las exenciones anti-cierre (batería, segundo plano, grupo de espera, phantom killer de Android 12+) se hacían a mano una vez; Android, el fabricante o Google Play Services pueden deshacerlas sin que nada lo note. | Corregido: `charge.sh` las reaplica por Shizuku al aparecer y cada 30 min (`KEEPALIVE=0` para no tocarlas) |
 | 18 | Alta | No había forma de saber si el móvil está preparado para sobrevivir (p. ej. Termux:Boot nunca abierto o forzado a detenerse). | Corregido: `doctor.sh`, `tools/noroot-doctor.sh`, en `/salud` y `/diagnostico` |
 | 19 | Media | `boot.sh` se ejecuta también al reabrir Termux y lanzaba otro bucle vigilante cada vez. | Corregido: `loop.pid` |
+| 20 | Media | El instalador sin root empezaba sin comprobar si el móvil puede y no decía qué faltaba al terminar. | Corregido: `tools/noroot-install.sh check` (también al inicio de `packages`); `scripts` y `noroot-bot.sh enable` terminan con `doctor.sh` |
 
 Análisis completo, perfiles por fabricante y matriz: [`docs/es/14-sin-root-fiabilidad.md`](es/14-sin-root-fiabilidad.md).
 Lo que `doctor.sh` lee de Android (`dumpsys`, `am`, etiqueta del wake lock) sale de la documentación y

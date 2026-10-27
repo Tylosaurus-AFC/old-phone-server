@@ -24,6 +24,8 @@ api)
   ;;
 enable)
   ph 'touch ~/server/BOT_ENABLED; ~/server/bot.sh; sleep 8; tail -3 '"$OPT"'/service.log'
+  echo; echo "== Health check (tools/noroot-doctor.sh) =="
+  ph 'bash ~/server/doctor.sh' </dev/null || true
   ;;
 disable)
   ph 'rm -f ~/server/BOT_ENABLED; touch ~/server/stopping; pkill -9 -f "[s]erver/bot.sh"; pkill -f "[o]pt/bot/bot.py"; echo "bot disabled and stopped"'

@@ -63,6 +63,7 @@ exempt them from battery limits, set up SSH into Termux and Shizuku (thedjchi fo
 
 ```bash
 cp config.example.sh config.sh && $EDITOR config.sh      # NOROOT_SSH, NOROOT_IP, TZ_NAME…
+tools/noroot-install.sh check        # can this phone run it?
 tools/noroot-install.sh packages     # proot-distro, openssh, termux-api, jq
 tools/noroot-install.sh container    # Debian 13 container "bot" (from Docker Hub)
 tools/noroot-install.sh provision    # Python venv, yt-dlp, ffmpeg…

@@ -121,6 +121,7 @@ the bot's `/reiniciar confirmar` tells you it cannot reboot the phone.
 ### 5. Debian + the bot
 
 ```bash
+tools/noroot-install.sh check             # can this phone run it? stops on Android < 7 or < 1 GB free
 tools/noroot-install.sh packages          # proot-distro, openssh, termux-api, jq…
 tools/noroot-install.sh container         # Debian 13 in a proot-distro container ("bot"; from Docker Hub)
 tools/noroot-install.sh provision         # Python venv, yt-dlp, ffmpeg…  (same script as root mode)

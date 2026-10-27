@@ -3,6 +3,7 @@
 # (docs/es/12-modo-sin-root.md). Do the manual steps of that guide first (Termux apps, sshd +
 # your SSH key, Shizuku); this script does the rest in steps you can repeat one by one.
 #
+#   tools/noroot-install.sh check               can this phone run it? (Android, CPU, space, Termux build)
 #   tools/noroot-install.sh packages            Termux packages (proot-distro, openssh, termux-api, jq...)
 #   tools/noroot-install.sh container [file]    create the Debian container (from Docker Hub, or a rootfs file)
 #   tools/noroot-install.sh provision           packages + Python venv + yt-dlp inside Debian
@@ -13,12 +14,33 @@ set -euo pipefail
 source "$(dirname "$0")/noroot-common.sh"
 step="${1:-}"; shift || true
 case "$step" in
-  packages|container|provision|scripts|rish|voice) need_phone ;;
+  check|packages|container|provision|scripts|rish|voice) need_phone ;;
   *) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
 
+# Before installing anything: stop on what cannot work, warn about the rest. Free-space
+# thresholds are estimates (Debian + Python + ffmpeg + yt-dlp), not measurements.
+preflight() {
+  ph 'S=$(getprop ro.build.version.sdk); R=$(getprop ro.build.version.release)
+      F=$(df -Pk $HOME | awk "NR == 2 {print int(\$4 / 1024)}")
+      echo "Android $R (SDK $S) · $(getprop ro.product.manufacturer) $(getprop ro.product.model) · CPU $(uname -m) · ${F} MB free · Termux ${TERMUX_VERSION:-?} (${TERMUX_APK_RELEASE:-unknown build})"
+      bad=0
+      [ "${S:-0}" -ge 24 ] || { echo "STOP: Termux needs Android 7 or newer. Use root mode (docs/*/02-root.md)."; bad=1; }
+      [ "${S:-0}" -ge 30 ] || echo "WARN: below Android 11 Shizuku cannot start by itself at boot: you will start it by hand after each reboot."
+      case "$(uname -m)" in aarch64|armv7l|armv8l) ;; *) echo "WARN: CPU $(uname -m) has not been tested with this project." ;; esac
+      [ "${F:-0}" -ge 1024 ] || { echo "STOP: less than 1 GB free. Free space first (about 3 GB is comfortable)."; bad=1; }
+      [ "${F:-0}" -ge 3072 ] || echo "WARN: under 3 GB free: the install fits, but downloads need room too."
+      [ "${TERMUX_APK_RELEASE:-}" = GOOGLE_PLAY_STORE ] && echo "WARN: Termux from Google Play. Install Termux, Termux:Boot and Termux:API from GitHub or F-Droid (same source for all three)."
+      exit $bad' </dev/null
+}
+
 case "$step" in
+check)
+  preflight && echo "OK: nothing blocks the install. Next: tools/noroot-install.sh packages"
+  ;;
+
 packages)
+  preflight || { echo "Fix the STOP items above first."; exit 1; }
   ph 'pkg update -y && pkg install -y proot-distro openssh termux-api jq curl tar xz-utils procps findutils'
   echo "Packages installed. (rclone is only needed for the optional NAS/DLNA recipes: pkg install rclone)"
   ;;
@@ -71,6 +93,8 @@ RC
       rm -rf ~/server-new
       echo "scripts installed in ~/server; boot hook in ~/.termux/boot/00-server.sh"'
   echo "Remember: open the Termux:Boot app ONCE by hand, or Android never delivers the boot event to it."
+  echo; echo "== Health check (tools/noroot-doctor.sh) =="
+  ph 'bash ~/server/doctor.sh' </dev/null || true
   ;;
 
 rish)

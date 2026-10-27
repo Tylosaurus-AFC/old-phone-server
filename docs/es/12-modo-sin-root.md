@@ -122,6 +122,7 @@ Sin Shizuku el vigilante sigue funcionando: recurre a Termux:API para la baterí
 ### 5. Debian + el bot
 
 ```bash
+tools/noroot-install.sh check             # ¿puede este móvil? se para con Android < 7 o < 1 GB libre
 tools/noroot-install.sh packages          # proot-distro, openssh, termux-api, jq…
 tools/noroot-install.sh container         # Debian 13 en un contenedor de proot-distro («bot»; desde Docker Hub)
 tools/noroot-install.sh provision         # entorno Python, yt-dlp, ffmpeg…  (el mismo script que en modo root)

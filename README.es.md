@@ -63,6 +63,7 @@ las restricciones de batería, prepara SSH a Termux y Shizuku (fork de thedjchi)
 
 ```bash
 cp config.example.sh config.sh && $EDITOR config.sh      # NOROOT_SSH, NOROOT_IP, TZ_NAME…
+tools/noroot-install.sh check        # ¿puede este móvil?
 tools/noroot-install.sh packages     # proot-distro, openssh, termux-api, jq
 tools/noroot-install.sh container    # contenedor Debian 13 «bot» (desde Docker Hub)
 tools/noroot-install.sh provision    # entorno Python, yt-dlp, ffmpeg…

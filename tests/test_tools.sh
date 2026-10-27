@@ -4,7 +4,7 @@
 # the phone (captured, never executed). No phone, network or real adb needed.
 set -u
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
-T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+T="${KEEP_T:-$(mktemp -d)}"; [ -n "${KEEP_T:-}" ] || trap 'rm -rf "$T"' EXIT
 PASS=0; FAIL=0
 check() { if [ "$2" = "$3" ]; then PASS=$((PASS + 1)); echo "ok   - $1"
           else FAIL=$((FAIL + 1)); echo "FAIL - $1 (expected '$2', got '$3')"; fi; }
@@ -36,6 +36,9 @@ cat > "$S/ssh" <<EOF
 while [ "\$1" = -o ]; do shift 2; done; shift      # options and host
 echo "\$*" >> "$T/ssh.log"
 n=\$(wc -l < "$T/ssh.log"); cat > "$T/ssh.stdin.\$n"
+# FAKE_SSH_EXEC=1: really run the remote command here (with the getprop/df shims), for the
+# phone-side scripts that must be checked by what they do, not just sent
+if [ "\${FAKE_SSH_EXEC:-0}" = 1 ] && [ "\$*" != "echo ok" ]; then exec bash -c "\$*"; fi
 case "\$*" in
   "echo ok") echo ok ;;
   *"tar -cf"*) d=\$(mktemp -d); echo t > "\$d/token"; tar -cf - -C "\$d" token; rm -rf "\$d" ;;
@@ -43,6 +46,9 @@ esac
 exit 0
 EOF
 printf '#!/bin/sh\necho "curl $*" >> "%s/curl.log"\nexit 1\n' "$T" > "$S/curl"
+printf '#!/bin/sh\ncase "$1" in ro.build.version.sdk) echo "${FAKE_SDK:-34}" ;; ro.build.version.release) echo 14 ;; *) echo X ;; esac\n' > "$S/getprop"
+printf '#!/bin/sh\necho "Filesystem 1024-blocks Used Available Capacity Mounted"\necho "/dev/x 1 1 $(( ${FAKE_FREE_MB:-5000} * 1024 )) 1%%%% /"\n' > "$S/df"
+printf '#!/bin/sh\necho "scp $*" >> "%s/scp.log"\nexit 0\n' "$T" > "$S/scp"
 # the scripts wait for the phone (sleep 2..25 s): no need to wait for a fake one
 printf '#!/bin/sh\nexit 0\n' > "$S/sleep"
 chmod +x "$S"/*
@@ -157,6 +163,26 @@ conf "${BASE_CONF[@]}"; run noroot-doctor.sh
 check "noroot-doctor: runs ~/server/doctor.sh over SSH" "0 yes" "$RC $(has "$T/ssh.log" "bash ~/server/doctor.sh")"
 FAKE_SSH_DOWN=1 run noroot-doctor.sh
 check "noroot-doctor: phone unreachable: clear message" "1 yes" "$RC $(has "$T/out" "Cannot reach the phone over SSH")"
+
+# noroot-install.sh check/packages: the phone-side preflight, really executed
+conf "${BASE_CONF[@]}"
+FAKE_SSH_EXEC=1 run noroot-install.sh check
+check "preflight: a fine phone passes" "0 yes" "$RC $(has "$T/out" "OK: nothing blocks the install")"
+FAKE_SSH_EXEC=1 FAKE_SDK=23 run noroot-install.sh check
+check "preflight: Android 6 stops, pointing to root mode" "1 yes" "$RC $(has "$T/out" "STOP: Termux needs Android 7")"
+FAKE_SSH_EXEC=1 FAKE_SDK=29 run noroot-install.sh check
+check "preflight: Android 10 passes with the Shizuku warning" "0 yes" "$RC $(has "$T/out" "WARN: below Android 11")"
+FAKE_SSH_EXEC=1 FAKE_FREE_MB=500 run noroot-install.sh check
+check "preflight: 500 MB free stops" "1 yes" "$RC $(has "$T/out" "STOP: less than 1 GB free")"
+FAKE_SSH_EXEC=1 FAKE_FREE_MB=2000 run noroot-install.sh check
+check "preflight: 2 GB free only warns" "0 yes" "$RC $(has "$T/out" "WARN: under 3 GB free")"
+FAKE_SSH_EXEC=1 FAKE_SDK=23 run noroot-install.sh packages
+check "packages: refuses to install when the preflight stops" "1 no" "$RC $(has "$T/out" "pkg update")"
+run noroot-install.sh scripts
+check "scripts: ends with the health check" "0 yes" "$RC $(has "$T/ssh.log" "bash ~/server/doctor.sh")"
+check "scripts: doctor.sh is among the files sent" yes "$(grep -q 'doctor.sh ~/server/doctor.sh\|for s in .*doctor.sh' "$T/ssh.log" && echo yes || echo no)"
+printf '' > "$T/in"; run noroot-bot.sh enable
+check "noroot-bot enable: shows the health check" yes "$(has "$T/ssh.log" "bash ~/server/doctor.sh")"
 
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]
