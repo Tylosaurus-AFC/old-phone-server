@@ -1,0 +1,17 @@
+# Runs tests/run.sh (shell syntax, secret scan, fake-battery/Shizuku shell tests and the bot's
+# unit tests) on every push and pull request. No phone, network or secrets needed.
+name: tests
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+      - run: bash tests/run.sh

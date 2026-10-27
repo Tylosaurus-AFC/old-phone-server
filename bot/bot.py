@@ -31,6 +31,7 @@ import requests
 
 import bigupload
 import db
+import diag
 import health
 import pending
 import stt
@@ -2426,8 +2427,23 @@ def health_text():
     bad = [e for e in day if e["k"] in ("fallo", "caida", "colgado", "aviso")]
     if bad:
         lines.append(f"\nÚltimo problema: {html.escape(health.fmt(bad[-1]))}")
-    lines.append("\n/historial – eventos recientes")
+    lines.append("\n/historial – eventos recientes · /diagnostico – informe para pedir ayuda")
     return "\n".join(lines)
+
+
+def diag_command(chat):
+    """/diagnostico: informe de solo lectura, sin secretos, para pedir ayuda (ver diag.py)."""
+    path = Path("/tmp") / f"diagnostico-{time.strftime('%Y%m%d-%H%M')}.txt"
+    try:
+        path.write_text(diag.report(), encoding="utf-8")
+        send_file(chat, path, caption="🩺 Informe de diagnóstico. Quité token, IDs, IPs y "
+                                      "rutas de enlaces, pero revísalo antes de compartirlo.",
+                  as_doc=True)
+    except Exception as e:
+        log.exception("diagnostico")
+        say(chat, f"❌ No pude generar el informe: {str(e).replace(TOKEN, '…')[:200]}")
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def history_text(arg):
@@ -2576,15 +2592,63 @@ def reboot_command(chat, arg):
                      [("🔄 Móvil completo", "/reiniciar confirmar")]])
 
 
+UPDATE_PKGS = ("yt-dlp", "yt-dlp-ejs", "gallery-dl")
+UPDATE_MIN_FREE = 300 * 2**20       # pip necesita sitio para descargar y desempaquetar
+
+
+def tool_versions():
+    """{paquete: version} de los descargadores instalados en el venv ({} si pip falla)."""
+    try:
+        p = run([VENV_BIN / "pip", "list", "--format=json"], "/", timeout=120)
+        have = {d["name"].lower(): d["version"] for d in json.loads(p.stdout or "[]")}
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return {}
+    return {n: have[n] for n in UPDATE_PKGS if n in have}
+
+
+def tools_work():
+    """Comprobacion minima tras actualizar: los ejecutables arrancan y dicen su version."""
+    for exe in ("yt-dlp", "gallery-dl"):
+        try:
+            if run([VENV_BIN / exe, "--version"], "/", timeout=120).returncode:
+                return False
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+    return True
+
+
 def update_tools(chat=None):
-    p = run([VENV_BIN / "pip", "install", "-q", "-U", "yt-dlp", "yt-dlp-ejs", "gallery-dl"],
-            "/", timeout=900)
-    ver = run([VENV_BIN / "yt-dlp", "--version"], "/").stdout.strip()
-    health.event("actualizacion", f"descargadores: yt-dlp {ver}" if p.returncode == 0
-                 else "falló la actualización de descargadores")
-    if chat:
-        say(chat, f"🔄 Actualizado. yt-dlp {ver}" if p.returncode == 0
-            else f"❌ Fallo al actualizar:\n{p.stderr[-500:]}")
+    """Actualiza yt-dlp/gallery-dl a lo ultimo. Antes mira que haya sitio y apunta las
+    versiones que habia; si pip falla o los programas no arrancan despues, vuelve a ellas.
+    Nunca lanza excepciones (lo llama un hilo que debe seguir vivo)."""
+    def done(ok, text):
+        health.event("actualizacion" if ok else "aviso", text)
+        if chat:
+            say(chat, ("🔄 " if ok else "❌ ") + text)
+    try:
+        free = shutil.disk_usage(str(VENV_BIN)).free
+        if free < UPDATE_MIN_FREE:
+            return done(False, f"no actualizo los descargadores: solo quedan "
+                               f"{free // 2**20} MB libres (hacen falta {UPDATE_MIN_FREE // 2**20})")
+        before = tool_versions()
+        p = run([VENV_BIN / "pip", "install", "-q", "-U", *UPDATE_PKGS], "/", timeout=900)
+        if p.returncode == 0 and tools_work():
+            after = tool_versions()
+            return done(True, "descargadores: " + ", ".join(
+                f"{n} {after.get(n, '?')}" for n in UPDATE_PKGS if n != "yt-dlp-ejs"))
+        why = (p.stderr.strip().splitlines() or ["los programas no arrancan"])[-1][:200] \
+            if p.returncode else "los programas no arrancan tras actualizar"
+        if before:
+            r = run([VENV_BIN / "pip", "install", "-q", *(f"{n}=={v}" for n, v in before.items())],
+                    "/", timeout=900)
+            back = "vuelvo a las versiones de antes" if r.returncode == 0 and tools_work() \
+                else "y TAMPOCO pude volver a las de antes (ver bot.log)"
+        else:
+            back = "no sé qué versiones había para volver atrás"
+        done(False, f"falló la actualización de descargadores ({why}); {back}")
+    except Exception as e:      # TimeoutExpired, OSError...: el hilo no debe morir
+        log.exception("update_tools")
+        done(False, f"falló la actualización de descargadores: {str(e)[:200]}")
 
 
 def auto_update():
@@ -2693,7 +2757,7 @@ OWNER_HELP = ("\n\n👑 <b>Solo tú (por privado)</b>\n"
               "/usuarios – quién tiene acceso\n"
               "/cookies – estado de las sesiones de Instagram/Facebook "
               "(mándame un .txt para renovarlas; /cookies borrar las elimina)\n"
-              "/actualizar – actualizar yt-dlp y gallery-dl ahora\n"
+              "/actualizar – actualizar yt-dlp y gallery-dl ahora (si falla, vuelve a las versiones de antes)\n"
               "/stats [<i>hoy|semana|mes|todo</i>] – enlaces por red y por persona, GB, fallos y "
               "notas de voz\n"
               "/reiniciar – el móvil (<i>confirmar</i>), solo adb (<i>adb</i>) o el Wi-Fi (<i>wifi</i>)\n"
@@ -2703,6 +2767,7 @@ OWNER_HELP = ("\n\n👑 <b>Solo tú (por privado)</b>\n"
               "/transcribir – notas de voz a texto en este chat (<i>on</i>/<i>off</i>)\n"
               "/salud – comprobación de todos los servicios, conexión, espacio y último fallo\n"
               "/historial [<i>N</i>] – últimos eventos (reinicios, cortes de Internet, avisos…)\n"
+              "/diagnostico – informe sin secretos (versiones, recursos, logs) para pedir ayuda\n"
               "/bateria [<i>N</i>] – batería a detalle: voltaje, salud, cortes de luz y "
               "últimos tramos de carga\n\n"
               "Te aviso por aquí si caducan las cookies, si la batería se calienta, "
@@ -2840,7 +2905,8 @@ def enqueue(msg, chat, user, urls, rest_text, mode="video"):
 
 OWNER_ONLY = {"/seguir", "/canales", "/dejar", "/destino", "/canal", "/permitir", "/quitar",
               "/usuarios", "/cookies", "/actualizar", "/reiniciar", "/transcribir", "/salud",
-              "/historial", "/bateria", "/batería", "/carga", "/guardar", "/stats"}
+              "/historial", "/bateria", "/batería", "/carga", "/guardar", "/stats",
+              "/diagnostico", "/diagnóstico"}
 OWNER_ANYWHERE = {"/actualizar", "/transcribir", "/salud", "/historial", "/guardar",   # tambien en grupos
                   "/bateria", "/batería", "/carga"}
 
@@ -2964,7 +3030,7 @@ def on_message(msg):
         else:
             say(chat, cookies_status())
     elif cmd == "/actualizar":
-        say(chat, "🔄 Actualizando yt-dlp y gallery-dl…")
+        say(chat, "🔄 Actualizando yt-dlp y gallery-dl… (si algo falla vuelvo a las versiones de ahora)")
         threading.Thread(target=update_tools, args=(chat,), daemon=True).start()
     elif cmd == "/canal":
         channel_command(chat, arg)
@@ -2979,6 +3045,8 @@ def on_message(msg):
                          daemon=True).start()
     elif cmd == "/historial":
         say(chat, history_text(arg), parse_mode="HTML")
+    elif cmd in ("/diagnostico", "/diagnóstico"):
+        threading.Thread(target=diag_command, args=(chat,), daemon=True).start()
     elif cmd in ("/bateria", "/batería", "/carga"):
         say(chat, battery_text(arg), parse_mode="HTML")
     elif cmd == "/reiniciar":

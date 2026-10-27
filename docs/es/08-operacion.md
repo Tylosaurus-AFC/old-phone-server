@@ -12,6 +12,7 @@ Comandos del día a día, desde el repositorio en tu PC.
 | Copiar todo el Debian (sin secretos) | `tools/make-image.sh` |
 | Restaurar todo el Debian (móvil nuevo/dañado) | `tools/restore-full.sh backup/image-<fecha> [--force]` |
 | Ver qué pasa | `/salud`, `/historial`, `/bateria`, `/estado` en Telegram |
+| Informe para pedir ayuda (sin secretos) | `/diagnostico` en Telegram (ver abajo) |
 
 ## Equivalentes del modo sin root
 
@@ -33,8 +34,11 @@ estado de likes/Last.fm… y arranca el bot) → comprueba `/estado`, `/salud` y
 ## Actualizar
 
 * **yt-dlp / gallery-dl** se actualizan solos cada 24 h y con `/actualizar`. Los sitios cambian
-  seguido; la mayoría de los «dejó de descargar» terminan aquí. Si una actualización rompe algo,
-  fija la versión anterior dentro del chroot:
+  seguido; la mayoría de los «dejó de descargar» terminan aquí. Antes de actualizar el bot
+  comprueba que queden al menos 300 MB libres y apunta las versiones instaladas; si `pip` falla o
+  `yt-dlp`/`gallery-dl` dejan de arrancar, reinstala esas versiones y deja un `aviso` en
+  `/historial`. `bot/requirements.txt` tiene las versiones con las que se probó el proyecto (las
+  usa una instalación nueva). Si una versión nueva que *arranca* rompe un sitio, fija la anterior a mano:
   `adb shell su -c "/data/debian/enter.sh '/opt/bot/venv/bin/pip install yt-dlp==<versión>'"`.
 * **Este proyecto:** `git pull` y luego `tools/deploy.sh`. Copia los archivos, los compila
   **en el móvil** (un error de sintaxis detiene el despliegue antes de tocar el bot) y mata
@@ -65,6 +69,21 @@ Repite `backup.sh` tras renovar cookies o cambiar algo, y la imagen tras cambios
      puro y corre sin cambios en arm64; solo hay que recompilar whisper.cpp);
   2. `tools/restore-config.sh backup/<fecha>`, ajusta `server.conf` (el driver de batería cambia de móvil a móvil);
   3. **primero el móvil viejo:** `tools/enable-bot.sh off`, *después* `tools/enable-bot.sh` en el nuevo.
+
+## Informe de diagnóstico (para pedir ayuda)
+
+`/diagnostico` (dueño, por privado) manda un archivo de texto con: versión del bot,
+Python/arquitectura/kernel, tiempo encendido, carga, RAM y disco libres, batería, versiones de
+yt-dlp/gallery-dl/ffmpeg, qué archivos de configuración existen (nunca su contenido), plugins,
+antigüedad de la señal de vida, descargas pendientes, los últimos 30 eventos y las últimas 60
+líneas de `bot.log` y `service.log`. Es de solo lectura. Antes de mandarlo oculta el token,
+`api.txt`, los IDs de `owners`, cualquier número largo (IDs de chats), las IPs y la ruta de cada
+enlace (solo queda el dominio). Nunca lee `cookies.txt` ni las sesiones. **Revísalo antes de
+publicarlo.**
+
+Sin Telegram, se genera dentro del Debian:
+`/opt/bot/venv/bin/python3 /opt/bot/diag.py > /tmp/diagnostico.txt`
+(modo root: a través de `/data/debian/enter.sh '…'`; sin root: `~/server/enter.sh '…'`).
 
 ## Resolver problemas
 

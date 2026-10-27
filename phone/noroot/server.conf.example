@@ -23,3 +23,7 @@ NIGHTLY=""
 # Weekly backup of the bot's settings and secrets to <disk>/Backups (Sundays 04:00, keeps 8).
 # The Backups folder is NOT served by the webdav/dlna extras (it holds the bot token).
 WEEKLY_BACKUP=0
+
+# Internet check used by charge.sh and bot.sh: TCP to port 53 of these hosts (any one
+# answering = online). Change it if your network blocks public DNS servers, e.g. your router.
+#NET_HOSTS="1.1.1.1 8.8.8.8"

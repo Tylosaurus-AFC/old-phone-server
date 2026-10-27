@@ -246,6 +246,108 @@ class Cameras(unittest.TestCase):
             c.parse_clip("2 10:00 12:30", now)       # more than 60 minutes
 
 
+class SafeUpdate(unittest.TestCase):
+    """/actualizar and the daily auto-update: never leave broken downloaders behind."""
+    def setUp(self):
+        SAID.clear()
+        self.calls = []
+        self.orig = (bot.run, bot.tool_versions, bot.tools_work, bot.shutil.disk_usage)
+        bot.shutil.disk_usage = lambda p: shutil._ntuple_diskusage(10 * 2**30, 0, 10 * 2**30)
+
+    def tearDown(self):
+        bot.run, bot.tool_versions, bot.tools_work, bot.shutil.disk_usage = self.orig
+
+    def fake_run(self, rcs):
+        def run(cmd, cwd, timeout=900):
+            self.calls.append([str(c) for c in cmd])
+            rc = rcs.pop(0) if rcs else 0
+            return bot.subprocess.CompletedProcess(cmd, rc, "", "" if rc == 0 else "ERROR: boom")
+        bot.run = run
+
+    def test_success_reports_new_versions(self):
+        self.fake_run([0])
+        bot.tool_versions = lambda: {"yt-dlp": "2026.9.1", "gallery-dl": "1.33.0"}
+        bot.tools_work = lambda: True
+        bot.update_tools(7)
+        self.assertEqual(len(self.calls), 1)
+        self.assertIn("yt-dlp 2026.9.1", SAID[-1][1])
+
+    def test_pip_failure_rolls_back_to_previous_versions(self):
+        self.fake_run([1, 0])
+        bot.tool_versions = lambda: {"yt-dlp": "2026.8.19", "gallery-dl": "1.32.17"}
+        bot.tools_work = lambda: True
+        bot.update_tools(7)
+        self.assertEqual(len(self.calls), 2)
+        self.assertIn("yt-dlp==2026.8.19", self.calls[1])
+        self.assertIn("gallery-dl==1.32.17", self.calls[1])
+        self.assertIn("vuelvo a las versiones de antes", SAID[-1][1])
+
+    def test_broken_after_install_also_rolls_back(self):
+        self.fake_run([0, 0])
+        bot.tool_versions = lambda: {"yt-dlp": "2026.8.19"}
+        works = iter([False, True])
+        bot.tools_work = lambda: next(works)
+        bot.update_tools(7)
+        self.assertIn("yt-dlp==2026.8.19", self.calls[1])
+
+    def test_low_disk_skips_pip(self):
+        self.fake_run([])
+        bot.shutil.disk_usage = lambda p: shutil._ntuple_diskusage(2**30, 2**30 - 2**20, 2**20)
+        bot.update_tools(7)
+        self.assertEqual(self.calls, [])
+        self.assertIn("MB libres", SAID[-1][1])
+
+    def test_exception_does_not_escape(self):
+        def boom(*a, **k):
+            raise bot.subprocess.TimeoutExpired("pip", 900)
+        bot.run = boom
+        bot.tool_versions = lambda: {}
+        bot.update_tools(7)          # must not raise: the auto-update thread would die
+        self.assertIn("falló", SAID[-1][1])
+
+
+class Diagnostics(unittest.TestCase):
+    def test_report_hides_secrets(self):
+        (BASE / "api.txt").write_text("1234567\nabcdef0123456789abcdef\n")
+        (BASE / "bot.log").write_text(
+            "2026 INFO run: yt-dlp https://www.instagram.com/p/SECRETPATH/?igsh=x\n"
+            "2026 WARNING poll: https://api.telegram.org/bot123456:TEST-TOKEN/getUpdates\n"
+            "2026 INFO owner 1 chat -1001234567890 from 192.168.1.20\n"
+            "2026 INFO other token 987654321:XYZabcdefghijklmnopqrstuvwxyz0123\n")
+        (BASE / "cookies.txt").write_text(".instagram.com\tTRUE\t/\tTRUE\t0\tsessionid\tCOOKIEVALUE\n")
+        try:
+            text = bot.diag.report()
+        finally:
+            (BASE / "api.txt").unlink()
+            (BASE / "cookies.txt").unlink()
+        for secret in ("TEST-TOKEN", "abcdef0123456789abcdef", "1234567", "SECRETPATH",
+                       "1001234567890", "192.168.1.20", "XYZabcdefghij", "COOKIEVALUE"):
+            self.assertNotIn(secret, text)
+        self.assertIn("https://www.instagram.com/…", text)
+        self.assertIn("cookies.txt: sí", text)
+        self.assertIn("versión del bot", text)
+
+    def test_owner_only_and_private(self):
+        SAID.clear()
+        run_and_wait(msg("/diagnostico", uid=2))
+        self.assertEqual(SAID, [])
+        run_and_wait(msg("/diagnostico", chat=100, ctype="group"))
+        self.assertTrue(any("privado" in t for _, t in SAID), SAID)
+
+    def test_owner_gets_a_document(self):
+        sent = []
+        orig = bot.send_file
+        bot.send_file = lambda chat, path, caption=None, as_doc=False, **k: sent.append(
+            (chat, path.read_text(encoding="utf-8"), as_doc))
+        try:
+            run_and_wait(msg("/diagnostico"))
+        finally:
+            bot.send_file = orig
+        self.assertEqual(len(sent), 1)
+        self.assertTrue(sent[0][2])
+        self.assertNotIn("TEST-TOKEN", sent[0][1])
+
+
 def tearDownModule():
     shutil.rmtree(_tmp, ignore_errors=True)
 

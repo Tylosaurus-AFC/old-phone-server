@@ -12,6 +12,7 @@ Day-to-day commands, run from the repository on your PC.
 | Copy the whole Debian (no secrets) | `tools/make-image.sh` |
 | Restore the whole Debian (new/damaged phone) | `tools/restore-full.sh backup/image-<date> [--force]` |
 | Look at what is happening | `/salud`, `/historial`, `/bateria`, `/estado` in Telegram |
+| Report to ask for help (no secrets) | `/diagnostico` in Telegram (see below) |
 
 ## No-root mode equivalents
 
@@ -33,8 +34,11 @@ likes/Last.fm state… and starts the bot) → check `/estado`, `/salud` and one
 ## Updating
 
 * **yt-dlp / gallery-dl** update themselves every 24 h and on `/actualizar`. Sites change often;
-  most "it stopped downloading" problems end here. If an update breaks something, pin the
-  previous version inside the chroot:
+  most "it stopped downloading" problems end here. Before updating the bot checks there are
+  at least 300 MB free and notes the installed versions; if `pip` fails or `yt-dlp`/`gallery-dl`
+  no longer start afterwards, it reinstalls those versions and logs an `aviso` in `/historial`.
+  `bot/requirements.txt` holds the versions the project was last tested with (used on a fresh
+  install). If a *working* new version still breaks a site, pin the previous one by hand:
   `adb shell su -c "/data/debian/enter.sh '/opt/bot/venv/bin/pip install yt-dlp==<version>'"`.
 * **This project:** `git pull`, then `tools/deploy.sh`. It copies the files, byte-compiles them
   **on the phone** (a syntax error stops the deploy before the bot is touched), then kills
@@ -65,6 +69,20 @@ Repeat `backup.sh` after renewing cookies or changing anything, and the image af
      Python and runs unchanged on arm64; only whisper.cpp must be recompiled);
   2. `tools/restore-config.sh backup/<date>`, adjust `server.conf` (battery driver differs per phone);
   3. **old phone first:** `tools/enable-bot.sh off`, *then* `tools/enable-bot.sh` on the new one.
+
+## Diagnostic report (to ask for help)
+
+`/diagnostico` (owner, private chat) sends a text file with: bot version, Python/arch/kernel,
+uptime, load, free RAM and disk, battery, versions of yt-dlp/gallery-dl/ffmpeg, which config
+files exist (never their contents), plugins, heartbeat age, pending downloads, the last 30
+events and the last 60 lines of `bot.log` and `service.log`. It is read-only. Before sending it
+hides the token, `api.txt`, the IDs in `owners`, any long number (chat IDs), IP addresses and the
+path of every link (only the domain stays). It never reads `cookies.txt` or session files.
+**Read it before posting it publicly.**
+
+Without Telegram, generate it inside Debian:
+`/opt/bot/venv/bin/python3 /opt/bot/diag.py > /tmp/diagnostico.txt`
+(root mode: through `/data/debian/enter.sh '…'`; no-root: `~/server/enter.sh '…'`).
 
 ## Troubleshooting
 

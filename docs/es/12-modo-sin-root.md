@@ -176,7 +176,7 @@ cámbialo en la interfaz de Ajustes (`~/server/ui.sh dump` / `ui.sh tap "Texto"`
 | `sa.sh 'órdenes'` | ejecuta órdenes como usuario shell por `rish` y devuelve la salida de forma fiable (ver abajo) |
 | `guard.sh` → `/data/local/tmp/srv-guard.sh` | guardián del lado shell: mantiene encendida la depuración inalámbrica; si el `sshd` de Termux falta 2 vueltas, abre la ventana de Termux para que `~/.bashrc` reinicie el servidor |
 | `ui.sh` | tocar y leer la pantalla del propio móvil por Shizuku |
-| `server.conf` | ajustes (nombre del contenedor, `OEM`, servicios, trabajo nocturno) |
+| `server.conf` | ajustes (nombre del contenedor, `OEM`, servicios, trabajo nocturno, `NET_HOSTS` para comprobar Internet) |
 
 ### Trampas que costaron tiempo de verdad (para que te las saltes)
 

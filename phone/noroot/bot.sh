@@ -20,7 +20,14 @@ echo $$ > $D/bot.pid
 
 # Event for the bot's /historial (same format as health.py; no quotes inside the text)
 ev() { echo "{\"t\":$(date +%s),\"k\":\"$1\",\"x\":\"$2\"}" >> $EV; }
-online() { timeout 5 bash -c '</dev/tcp/1.1.1.1/53' 2>/dev/null || timeout 5 bash -c '</dev/tcp/8.8.8.8/53' 2>/dev/null; }
+# Internet check: TCP to port 53 of NET_HOSTS (server.conf; default two public DNS servers)
+online() {
+  local h
+  for h in ${NET_HOSTS:-1.1.1.1 8.8.8.8}; do
+    timeout 5 bash -c "</dev/tcp/$h/53" 2>/dev/null && return 0
+  done
+  return 1
+}
 
 termux-wake-lock                 # never sleep with the screen off
 

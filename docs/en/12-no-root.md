@@ -177,7 +177,7 @@ adb: change those in the Settings UI (`~/server/ui.sh dump` / `ui.sh tap "Text"`
 | `sa.sh 'cmds'` | runs commands as the shell user through `rish` and returns the output reliably (see below) |
 | `guard.sh` → `/data/local/tmp/srv-guard.sh` | shell-side guardian: keeps wireless debugging on; if Termux's `sshd` is gone for 2 passes, opens Termux's window so `~/.bashrc` restarts the server |
 | `ui.sh` | tap and read the phone's own screen through Shizuku |
-| `server.conf` | settings (container name, `OEM`, services, nightly job) |
+| `server.conf` | settings (container name, `OEM`, services, nightly job, `NET_HOSTS` for the Internet check) |
 
 ### Gotchas that cost real time (so you can skip them)
 

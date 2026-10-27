@@ -3,6 +3,8 @@
 # (ONCE=1) per scenario. Checks what it hands the bot (battery, charge state, Wi-Fi), the
 # BOT_ENABLED latch and the USB-disk service gate. No phone needed.
 set -u
+# NET_HOSTS=127.0.0.1 in each server.conf: the Internet check fails at once instead of
+# waiting 5 s per public host (no network in CI / sandboxes).
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 PASS=0; FAIL=0
@@ -47,7 +49,7 @@ EOF
 run() { HOME="$T/home" PREFIX="$T/prefix" PATH="$S:$PATH" ONCE=1 bash "$HERE/phone/noroot/charge.sh" >/dev/null 2>&1; }
 O() { cat "$OPT/$1" 2>/dev/null; }
 
-setup "OEM="
+setup "OEM=" "NET_HOSTS=127.0.0.1"
 report 50 Charging 10 4200 "80 1" ""; run
 check "charging at 50%: not paused" 0 "$(O charge_paused)"
 check "battery capacity handed to the bot" 50 "$(O sys/battery/capacity)"
@@ -68,14 +70,14 @@ check "Full is not 'paused' status-wise (stays Full)" Full "$(O sys/battery/stat
 report 70 Discharging 00 4000 "80 1" ""; run
 check "unplugged: not paused (a real power cut)" 0 "$(O charge_paused)"
 
-setup "OEM=oplus"
+setup "OEM=oplus" "NET_HOSTS=127.0.0.1"
 report 60 Charging 10 4200 "75 1" ""; run
 check "oplus: charge limit read from the phone" "hasta 75" "$(O charge_range)"
 report 60 Charging 10 4200 "75 0" ""; run
 check "oplus: limiter switched off -> 100" "hasta 100" "$(O charge_range)"
 
 # BOT_ENABLED latch: charge.sh must not start bot.sh without the file
-setup "OEM="
+setup "OEM=" "NET_HOSTS=127.0.0.1"
 report 50 Charging 10 4200 "80 1" ""
 printf '#!/bin/sh\ntouch "%s/bot-started"\n' "$T" > "$T/home/server/bot.sh"; chmod +x "$T/home/server/bot.sh"
 rm -f "$T/bot-started"; run
@@ -86,7 +88,7 @@ touch "$T/home/server/BOT_ENABLED"; run
 check "BOT_ENABLED present: bot.sh started" started "$r"
 
 # USB-disk services: started only with a disk mounted, and a no-<name> file disables one
-setup "SERVICES=\"a b\""
+setup "SERVICES=\"a b\"" "NET_HOSTS=127.0.0.1"
 printf '#!/bin/sh\ntouch "%s/svc-a"; sleep 1\n' "$T" > "$T/home/server/extras/a.sh"
 printf '#!/bin/sh\ntouch "%s/svc-b"; sleep 1\n' "$T" > "$T/home/server/extras/b.sh"
 chmod +x "$T/home/server/extras/"*.sh
