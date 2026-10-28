@@ -2135,6 +2135,11 @@ def pdf_of(m):
     return None
 
 
+def pdf_zip_path(d: Path, name):
+    """Ruta del .zip de /pdf zip: el nombre del PDF sin caracteres raros (o "pdf")."""
+    return d / ((re.sub(r"[^\w.-]+", "_", name)[:60] or "pdf") + ".zip")
+
+
 def pdf_command(msg, chat, arg):
     """/pdf en el pie de un PDF o respondiendo a uno: cada pagina como imagen.
     Opciones (se combinan): 'archivo' -> JPG como archivo, sin recomprimir; 'png';
@@ -2198,7 +2203,7 @@ def pdf_command(msg, chat, arg):
         zf = None
         if as_zip:
             import zipfile
-            zpath = d / f"{re.sub(r'[^\w.-]+', '_', name)[:60] or 'pdf'}.zip"
+            zpath = pdf_zip_path(d, name)
             zf = zipfile.ZipFile(zpath, "w", zipfile.ZIP_STORED)   # JPG/PNG ya van comprimidos
         for a in range(first, last + 1, PDF_BATCH):
             b = min(a + PDF_BATCH - 1, last)

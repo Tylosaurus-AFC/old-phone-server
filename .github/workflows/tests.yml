@@ -1,5 +1,7 @@
-# Runs tests/run.sh (shell syntax, secret scan, fake-battery/Shizuku shell tests and the bot's
-# unit tests) on every push and pull request. No phone, network or secrets needed.
+# Runs tests/run.sh (shell syntax, secret scan, ruff, the shell tests against fake
+# batteries/Shizuku/adb/ssh/clock and the bot's unit tests) on every push and pull request.
+# No phone, network or secrets needed. Python 3.13 is what Debian 13 gives the bot on the
+# phone; 3.11 keeps older Debian/Termux Pythons working.
 name: tests
 on: [push, pull_request]
 permissions:
@@ -7,11 +9,15 @@ permissions:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
       - run: pip install requests ruff==0.16.9
       - run: bash tests/run.sh
