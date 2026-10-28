@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs every test. Needs bash and python3 with `requests` installed (pip install requests).
+# Runs every test. Needs bash and python3 (3.11 or newer) with `requests` installed (pip install requests).
 set -e
 cd "$(dirname "$0")/.."
 echo "== shell syntax =="; for f in tools/*.sh phone/*.sh phone/boot/*.sh phone/boot/initrc/*.sh phone/extras/*.sh phone/noroot/*.sh phone/noroot/extras/*.sh config.example.sh; do bash -n "$f"; done; echo ok

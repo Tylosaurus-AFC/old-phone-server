@@ -148,10 +148,10 @@ boot() { HOME="$T/home" PREFIX="$T/prefix" PATH="$S:$PATH" sh "$HERE/phone/noroo
 loops() { n=0; for p in $(pgrep -f "[w]hile true; do $T/home/server/charge.sh" 2>/dev/null); do n=$((n + 1)); done; echo $n; }
 boot; sleep 0.5; boot; sleep 0.5; boot; sleep 0.5
 check "boot.sh run 3 times: one watchdog loop" 1 "$(loops)"
-kill $(cat "$T/home/server/loop.pid") 2>/dev/null; sleep 0.3
+L=$(cat "$T/home/server/loop.pid"); pkill -P $L 2>/dev/null; kill $L 2>/dev/null; sleep 0.3
 boot; sleep 0.5
 check "boot.sh after the loop died: starts a new one" 1 "$(loops)"
-kill $(cat "$T/home/server/loop.pid") 2>/dev/null
+L=$(cat "$T/home/server/loop.pid"); pkill -P $L 2>/dev/null; kill $L 2>/dev/null
 
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

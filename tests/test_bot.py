@@ -188,6 +188,12 @@ class CoreHelpers(unittest.TestCase):
         self.assertEqual(bot.cache_key("https://www.instagram.com/p/AbC/?utm_source=ig&hl=es", "video"),
                          bot.cache_key("https://instagram.com/p/AbC/", "video"))
 
+    def test_pdf_zip_path(self):
+        d = Path("/tmp/x")
+        self.assertEqual(bot.pdf_zip_path(d, "Mi PDF: (v2)"), d / "Mi_PDF_v2_.zip")
+        self.assertEqual(bot.pdf_zip_path(d, ""), d / "pdf.zip")
+        self.assertEqual(bot.pdf_zip_path(d, "x" * 100).name, "x" * 60 + ".zip")
+
     def test_parse_cookies(self):
         sample = ".instagram.com\tTRUE\t/\tTRUE\t1999999999\tsessionid\tabc"
         self.assertEqual(bot.parse_cookies(sample), {"instagram.com": {"sessionid": 1999999999}})

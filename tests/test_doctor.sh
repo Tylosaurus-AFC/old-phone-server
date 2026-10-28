@@ -6,7 +6,8 @@ set -u
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 T="$(mktemp -d)"
 PIDS=""
-trap 'kill $PIDS 2>/dev/null; rm -rf "$T"' EXIT
+# the fake processes' children (sleep) too, or they outlive the test
+trap 'for p in $PIDS; do pkill -P $p 2>/dev/null; kill $p 2>/dev/null; done; rm -rf "$T"' EXIT
 PASS=0; FAIL=0
 check() { if [ "$2" = "$3" ]; then PASS=$((PASS + 1)); echo "ok   - $1"
           else FAIL=$((FAIL + 1)); echo "FAIL - $1 (expected '$2', got '$3')"; fi; }
