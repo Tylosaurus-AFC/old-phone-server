@@ -88,3 +88,14 @@ No hay compatibilidad nueva verificada con ningún dispositivo ni versión de An
 
 `git pull` y el script de despliegue de siempre; no hay migraciones. Para revertir, desplegar el
 commit anterior. `NET_HOSTS` en `server.conf` lo ignoran los scripts antiguos.
+
+## Integración en main (28-10-2026)
+
+`main` avanzó (fast-forward) hasta `8782efe`, conservando los hashes, y recibió con `cherry-pick -x` los
+avisos por cambio de estado (`969a9c3`), la compatibilidad con Python 3.11 y la CI en 3.11/3.13 (`d7a3e64`)
+y la robustez de `/diagnostico` y `/salud` (`cc88c51`), más este commit de unión. Siguen solo en
+`claude/maintenance-and-tests_by_claude`, pendientes de revisión o de un móvil real: la detección del estado
+de Shizuku y su rearranque con el aviso START del fork (`502cc50`), el mensaje del vigilante cuando el bot
+está muerto (`2ea9b02`) y su documentación, la evaluación de WhatsApp y el catálogo de fallos (`7827800`).
+La CI no pasó nunca antes de `d7a3e64` (una f-string de Python 3.12+ que ya estaba en main); los informes
+anteriores no lo detectaron.
