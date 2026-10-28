@@ -54,6 +54,15 @@ def redact(text, secrets=None):
     return _LONG_ID_RE.sub("<id>", text)
 
 
+def _num(text, default=None):
+    """float del texto, o `default`: los archivos los escriben otros procesos y pueden venir
+    vacios, a medias o con "null"; el informe tiene que salir igual."""
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return default
+
+
 def _cmd_version(*cmd):
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -103,13 +112,13 @@ def report():
         f"versión del bot: {_read(BASE / 'VERSION', '?')}",
         f"python: {sys.version.split()[0]} · {platform.machine()} · kernel {platform.release()}",
         f"modo: {'sin root (proot)' if (BASE / 'sys').is_dir() else 'root (chroot) o desconocido'}",
-        f"encendido hace: {int(float(up[0] if up else 0)) // 3600} h",
+        f"encendido hace: {int(_num(up[0] if up else 0, 0)) // 3600} h",
         f"carga: {_read('/proc/loadavg', 'no disponible')}",
         f"RAM: {_meminfo()}",
         f"disco /: {_disk('/')}",
         f"disco /tmp: {_disk('/tmp')}",
         f"batería: {_read(BAT / 'capacity', '?')}% · {_read(BAT / 'status', '?')} · "
-        f"{int(_read(BAT / 'temp', '0') or 0) / 10:.1f} °C",
+        f"{_num(_read(BAT / 'temp'), 0) / 10:.1f} °C",
         "",
         "== herramientas ==",
         f"yt-dlp: {_cmd_version(str(VENV_BIN / 'yt-dlp'), '--version')}",
@@ -124,11 +133,11 @@ def report():
         if (BASE / "plugins").is_dir() else []
     lines.append(f"plugins: {', '.join(plugins) or 'ninguno'}")
     hb = _read(BASE / "heartbeat")
-    lines.append(f"señal de vida: hace {int(now - float(hb))} s" if hb.replace(".", "").isdigit()
+    lines.append(f"señal de vida: hace {int(now - _num(hb))} s" if _num(hb) is not None
                  else "señal de vida: no consta")
     try:
         pend = len(json.loads(_read(BASE / "pending_downloads.json", "[]") or "[]"))
-    except ValueError:
+    except (ValueError, TypeError):
         pend = "ilegible"
     lines += [f"descargas pendientes: {pend}", "", "== últimos eventos =="]
     for raw in _read(BASE / "events.jsonl").splitlines()[-30:]:

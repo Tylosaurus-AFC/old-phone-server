@@ -539,6 +539,42 @@ class ProblemCollection(unittest.TestCase):
         self.assertIn("Resuelto", sent[1])
 
 
+class RobustReports(unittest.TestCase):
+    """/diagnostico and /salud must answer even with odd files written by other processes."""
+    def setUp(self):
+        (BASE / "sys").mkdir(exist_ok=True)
+        self.orig = bot.http.get
+        def offline(*a, **k):
+            raise bot.requests.ConnectionError("offline")
+        bot.http.get = offline
+
+    def tearDown(self):
+        bot.http.get = self.orig
+        (BASE / "sys" / "doctor.txt").unlink(missing_ok=True)
+        bot.diag.BAT = Path("/sys/class/power_supply/battery")
+
+    def test_diagnostico_with_non_numeric_battery_values(self):
+        fake = Path(tempfile.mkdtemp())
+        for f, v in (("temp", "null"), ("capacity", ""), ("status", "x")):
+            (fake / f).write_text(v)
+        bot.diag.BAT = fake
+        self.assertIn("batería", bot.diag.report())
+
+    def test_diagnostico_with_garbage_heartbeat_and_pending_files(self):
+        (BASE / "heartbeat").write_text("1.2.3")
+        (BASE / "pending_downloads.json").write_text('{"not": "a list"}')
+        try:
+            self.assertIn("señal de vida", bot.diag.report())
+        finally:
+            (BASE / "heartbeat").unlink()
+            (BASE / "pending_downloads.json").unlink()
+
+    def test_salud_with_a_truncated_doctor_report(self):
+        for content in ("RESULT:", "RESULT:\n", "RESULT: weird", ""):
+            (BASE / "sys" / "doctor.txt").write_text(content)
+            self.assertIn("Salud del servidor", bot.health_text(), repr(content))
+
+
 def tearDownModule():
     shutil.rmtree(_tmp, ignore_errors=True)
 

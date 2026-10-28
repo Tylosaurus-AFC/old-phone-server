@@ -2422,7 +2422,7 @@ def health_text():
                         f"{read_sys(bat + '/capacity')}% · {temp:.1f} °C · {free:.1f} GB libres"))
     doc = read_sys(str(BASE / "sys" / "doctor.txt"), "")      # solo en modo sin root
     if doc.startswith("RESULT:"):
-        state = doc.split()[1]
+        state = (doc.split()[1:2] or ["?"])[0]          # un archivo truncado no rompe /salud
         bad = [l[5:] for l in doc.splitlines() if l.startswith("FAIL ")] + \
               [l[5:] for l in doc.splitlines() if l.startswith("WARN ")]     # lo peor primero
         lines.append(_check("Android/Termux", {"ok": True, "degraded": None}.get(state, False),
