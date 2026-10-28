@@ -118,3 +118,8 @@ del bot del primer arnés de simulación larga no probaban nada hasta crear all�
 | 31 | Media | `/diagnostico` y `/salud` fallaban con archivos raros | Corregido |
 | 32 | Media | El servidor mandaría START a la Shizuku oficial y pelearía con un usuario que la para a propósito | Corregido: detección de variante, `~/server/no-shizuku-restart` |
 | 33 | Baja | Las pruebas dejaban procesos `sleep` huérfanos | Corregido |
+
+Ejecución LONG=1 de `tests/test_longrun.sh` sobre una copia congelada de `41d6e11` (28-10-2026, este PC):
+escenarios A (corte), B (fallos encadenados) y C (fallos aleatorios, semilla 20261028) a 12, 24, 48 y 72 horas
+simuladas — 124/124 comprobaciones superadas; reinicios del Wi-Fi en el corte de 72 h: unos 74 (con la lógica
+anterior, 852). Las horas simuladas prueban la lógica del vigilante; aún no hay una prueba física larga.
