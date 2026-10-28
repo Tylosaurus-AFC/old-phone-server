@@ -20,6 +20,9 @@ only a real phone can confirm. All tests run with `tests/run.sh` (no phone, no n
 | Config missing / invalid (`config.sh`, `server.conf`) | `test_tools.sh`, `test_doctor.sh` | adb/ssh | yes (11 failures on old tools) | Windows Git Bash paths |
 | Phone unreachable (adb, SSH) | `test_tools.sh` | adb/ssh | — | — |
 | Android too old / low space before installing | `test_tools.sh` preflight (executed) | getprop, df | — | — |
+| Restore reports success after a failed extract (no space, missing container) | `test_tools.sh` noroot-restore (remote command really executed in a fake phone) | ssh | yes ("Done", exit 0 before) | — |
+| Root restore counts failed copies as restored | `test_tools.sh` restore-config (generated script executed) | adb | yes | — |
+| Backup without the token reported as a backup (both modes) | `test_tools.sh` backup.sh / noroot-backup.sh | adb/ssh | yes | — |
 | Backup/restore loses files | `test_backup_lists.sh`, `test_tools.sh` | adb/ssh | yes | restore on a spare phone |
 | Downloader update fails / tools broken afterwards | `test_bot.py` SafeUpdate | pip | yes | real pip on ARM |
 | Internet / DNS down | `test_bot.py` ProblemCollection, alerts end-to-end | `internet_ok` | — | real outage |

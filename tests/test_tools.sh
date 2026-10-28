@@ -23,8 +23,8 @@ echo "\$*" >> "$T/adb.log"
 [ "\$1" = -s ] && shift 2
 case "\$1" in
   get-state) [ "\${FAKE_ADB_DOWN:-0}" = 1 ] && exit 1; echo device ;;
-  push) cp "\$2" "$T/pushed/\$(basename "\$3")" ;;
-  pull) : > "\$3" ;;
+  push) cp "\$2" "$T/pushed/\$(basename "\$3")"; cat "\$2" >> "$T/pushed.all" 2>/dev/null ;;
+  pull) if [ -d "\$3" ]; then [ "\${FAKE_PULL_TOKEN:-0}" = 1 ] && echo t > "\$3/token"; else : > "\$3"; fi ;;
 esac
 exit 0
 EOF
@@ -38,10 +38,14 @@ echo "\$*" >> "$T/ssh.log"
 n=\$(wc -l < "$T/ssh.log"); cat > "$T/ssh.stdin.\$n"
 # FAKE_SSH_EXEC=1: really run the remote command here (with the getprop/df shims), for the
 # phone-side scripts that must be checked by what they do, not just sent
-if [ "\${FAKE_SSH_EXEC:-0}" = 1 ] && [ "\$*" != "echo ok" ]; then exec bash -c "\$*"; fi
+# (in a fake phone: its own HOME and PREFIX under \$T, never the real ones)
+if [ "\${FAKE_SSH_EXEC:-0}" = 1 ] && [ "\$*" != "echo ok" ]; then
+  HOME="$T/phonehome" PREFIX="$T/phoneprefix" exec bash -c "\$*" < "$T/ssh.stdin.\$n"
+fi
 case "\$*" in
   "echo ok") echo ok ;;
-  *"tar -cf"*) d=\$(mktemp -d); echo t > "\$d/token"; tar -cf - -C "\$d" token; rm -rf "\$d" ;;
+  *"tar -cf"*) d=\$(mktemp -d); if [ "\${FAKE_TAR_EMPTY:-0}" = 1 ]; then echo o > "\$d/owners"; tar -cf - -C "\$d" owners
+               else echo t > "\$d/token"; tar -cf - -C "\$d" token; fi; rm -rf "\$d" ;;
 esac
 exit 0
 EOF
@@ -49,12 +53,13 @@ printf '#!/bin/sh\necho "curl $*" >> "%s/curl.log"\nexit 1\n' "$T" > "$S/curl"
 printf '#!/bin/sh\ncase "$1" in ro.build.version.sdk) echo "${FAKE_SDK:-34}" ;; ro.build.version.release) echo 14 ;; *) echo X ;; esac\n' > "$S/getprop"
 printf '#!/bin/sh\necho "Filesystem 1024-blocks Used Available Capacity Mounted"\necho "/dev/x 1 1 $(( ${FAKE_FREE_MB:-5000} * 1024 )) 1%%%% /"\n' > "$S/df"
 printf '#!/bin/sh\necho "scp $*" >> "%s/scp.log"\nexit 0\n' "$T" > "$S/scp"
+printf '#!/bin/sh\nexit 0\n' > "$S/pkill"            # never kill anything on the PC running the tests
 # the scripts wait for the phone (sleep 2..25 s): no need to wait for a fake one
 printf '#!/bin/sh\nexit 0\n' > "$S/sleep"
 chmod +x "$S"/*
 
 conf() { printf '%s\n' "$@" > "$R/config.sh"; }       # conf <lines...>
-reset() { rm -f "$T"/*.log "$T"/ssh.stdin.* "$T"/pushed/*; }
+reset() { rm -f "$T"/*.log "$T"/ssh.stdin.* "$T"/pushed/* "$T/pushed.all"; }
 # run <script> [args...]: output in $T/out, exit code in $RC (stdin from $IN, default empty)
 run() { reset; (cd "$R" && PATH="$S:$PATH" bash "tools/$1" "${@:2}" < "${IN:-/dev/null}" > "$T/out" 2>&1); RC=$?; }
 BASE_CONF=(ADB=adb USB_SERIAL=FAKE123 PHONE_IP=192.0.2.10 ROOT_MODE=su BOOT_MODE=none
@@ -183,6 +188,44 @@ check "scripts: ends with the health check" "0 yes" "$RC $(has "$T/ssh.log" "bas
 check "scripts: doctor.sh is among the files sent" yes "$(grep -q 'doctor.sh ~/server/doctor.sh\|for s in .*doctor.sh' "$T/ssh.log" && echo yes || echo no)"
 printf '' > "$T/in"; run noroot-bot.sh enable
 check "noroot-bot enable: shows the health check" yes "$(has "$T/ssh.log" "bash ~/server/doctor.sh")"
+
+# ---- failures inside backup/restore must not be reported as success --------------------------
+PH="$T/phoneprefix/var/lib/proot-distro/containers/bot/rootfs/opt"
+rm -rf "$T/phonehome" "$T/phoneprefix"; mkdir -p "$T/phonehome/server" "$PH"
+printf '#!/bin/sh\nexit 0\n' > "$T/phonehome/server/bot.sh"; chmod +x "$T/phonehome/server/bot.sh"
+printf 'x' > "$PH/bot"              # /opt/bot is a FILE: cd fails, nothing can be restored
+mkdir -p "$T/bkr"; for f in token owners bot.db; do echo x > "$T/bkr/$f"; done
+conf "${BASE_CONF[@]}"; FAKE_SSH_EXEC=1 run noroot-restore.sh "$T/bkr"
+check "noroot-restore: a failed extract fails the command" 1 "$RC"
+check "noroot-restore: it says the restore failed" yes "$(has "$T/out" "RESTORE FAILED")"
+check "noroot-restore: no 'Done' after a failure" no "$(has "$T/out" "Done.")"
+check "noroot-restore: the bot is switched back on anyway" yes "$([ -f "$T/phonehome/server/BOT_ENABLED" ] && echo yes || echo no)"
+rm -f "$PH/bot"; mkdir -p "$PH/bot"; rm -f "$T/phonehome/server/BOT_ENABLED"
+FAKE_SSH_EXEC=1 run noroot-restore.sh "$T/bkr"
+check "noroot-restore: a good restore succeeds and puts the files in place" "0 x" "$RC $(cat "$PH/bot/token" 2>/dev/null)"
+
+# restore-config.sh (root): run the phone-side script it generates against folders where a
+# copy fails, and check it does not count the failure as restored
+mkdir -p "$T/bk2"; for f in token owners; do echo x > "$T/bk2/$f"; done
+conf "${BASE_CONF[@]}"; run restore-config.sh "$T/bk2"
+G="$T/gen.sh"; sed "s|/data/local/tmp/phonesrv.rc|$T/rc|; s|/data/debian|$T/deb|g" "$T/pushed/phonesrv.sh" > "$G"
+rm -rf "$T/rc" "$T/deb"; mkdir -p "$T/rc" "$T/deb/fs/opt"; cp "$T/bk2"/* "$T/rc/"
+printf 'x' > "$T/deb/fs/opt/bot"        # not a directory: every copy fails
+sh "$G" > "$T/out" 2>&1; RC=$?
+check "restore-config: failed copies are not counted as restored" yes "$(has "$T/out" "0 files restored")"
+check "restore-config: failures are reported and the script fails" "yes 1" "$(has "$T/out" "2 FAILED") $RC"
+
+# backups must contain the token, or they are not backups
+conf "${BASE_CONF[@]}"; rm -rf "$R/backup"
+printf '#!/bin/sh\nexit 0\n' > "$T/notoken"
+FAKE_TAR_EMPTY=1 run noroot-backup.sh
+check "noroot-backup: a backup without the token fails" "1 yes" "$RC $(has "$T/out" "BACKUP INCOMPLETE")"
+
+conf "${BASE_CONF[@]}"; rm -rf "$R/backup"; run backup.sh
+check "backup.sh (root): nothing pulled -> fails, says incomplete" "1 yes" "$RC $(has "$T/out" "BACKUP INCOMPLETE")"
+check "backup.sh (root): the phone-side script stops if the bot folder is missing" yes "$(has "$T/pushed.all" 'cd /data/debian/fs/opt/bot || {')"
+rm -rf "$R/backup"; FAKE_PULL_TOKEN=1 run backup.sh
+check "backup.sh (root): a backup with the token succeeds" "0 yes" "$RC $(has "$T/out" "Backup in:")"
 
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

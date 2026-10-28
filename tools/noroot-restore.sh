@@ -21,8 +21,17 @@ echo "Restoring:$FILES"
 OPT='$PREFIX/var/lib/proot-distro/containers/'"$CONTAINER"'/rootfs/opt/bot'
 
 ph 'rm -f ~/server/BOT_ENABLED; touch ~/server/stopping; pkill -9 -f "[s]erver/bot.sh"; pkill -f "^/opt/bot/venv/bin/python3 /opt/bot/bot.py"; sleep 3; true'
-( cd "$SRC" && tar -cf - $FILES ) | ph "cd $OPT && tar -xf - && chmod 600 token api.txt cookies.txt mtproto.session 2>/dev/null; rm -f heartbeat pending_downloads.json pending_voice.json; true"
-ph 'rm -f ~/server/stopping; touch ~/server/BOT_ENABLED; ~/server/bot.sh'
+# The extract decides success: a failed cd/tar (no space, missing container) must not be
+# reported as a restore.
+OK=1
+( cd "$SRC" && tar -cf - $FILES ) | ph "cd $OPT && tar -xf - && { chmod 600 token api.txt cookies.txt mtproto.session 2>/dev/null; rm -f heartbeat pending_downloads.json pending_voice.json; true; }" || OK=0
+ph 'rm -f ~/server/stopping; touch ~/server/BOT_ENABLED; ~/server/bot.sh'      # back on either way
+if [ "$OK" != 1 ]; then
+  echo "RESTORE FAILED: the files could not be written on the phone (no space? container '$CONTAINER' missing?)."
+  echo "Some of the previous files may already be replaced; the bot was switched back on."
+  echo "Check with tools/noroot-doctor.sh, fix it and run this again."
+  exit 1
+fi
 sleep 25
 ph 'tail -3 '"$OPT"'/bot.log' || true
 echo "Done. Check /estado, /salud and one link."

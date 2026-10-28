@@ -15,18 +15,19 @@ for f in "$SRC"/*; do
 done
 remote <<EOF
 T=$TMP.rc; cd \$T
-n=0
+n=0; bad=0
 for f in *; do
   case \$f in
-    server.conf) cp \$f $DEBIAN/ ;;
+    server.conf) ok() { cp \$f $DEBIAN/; } ;;
     pip-freeze.txt) continue ;;
     # temp copy + mv: the running bot never reads a half-written file (bot.db above all)
-    *) cp \$f $DEBIAN/fs/opt/bot/.\$f.rst && chmod 600 $DEBIAN/fs/opt/bot/.\$f.rst \
-         && mv $DEBIAN/fs/opt/bot/.\$f.rst $DEBIAN/fs/opt/bot/\$f ;;
+    *) ok() { cp \$f $DEBIAN/fs/opt/bot/.\$f.rst && chmod 600 $DEBIAN/fs/opt/bot/.\$f.rst \
+              && mv $DEBIAN/fs/opt/bot/.\$f.rst $DEBIAN/fs/opt/bot/\$f; } ;;
   esac
-  n=\$((n + 1))
+  if ok 2>/dev/null; then n=\$((n + 1)); else bad=\$((bad + 1)); echo "could not restore \$f"; fi
 done
 rm -rf \$T
 echo "\$n files restored"
+[ \$bad = 0 ] || { echo "\$bad FAILED"; exit 1; }
 EOF
 echo "Configuration restored. Run tools/deploy.sh to apply it."

@@ -12,7 +12,7 @@ mkdir -p "$DEST"
 # The files belong to root: copy them to a readable temp folder and pull from there
 remote <<EOF
 T=$TMP.bk; rm -rf \$T; mkdir -p \$T
-cd $DEBIAN/fs/opt/bot
+cd $DEBIAN/fs/opt/bot || { echo "no $DEBIAN/fs/opt/bot on the phone"; exit 1; }
 for f in token api.txt cookies.txt owners users.json subs.json cache.json stats.json \
          channels.json likes.json bot.db \
          mtproto.session ytmusic_cookies.txt lastfm.json scrobble_state.json camaras.json \
@@ -37,5 +37,7 @@ remote <<EOF
 rm -rf $TMP.bk
 EOF
 
+# A backup without the token cannot rebuild anything: say so instead of "Backup in"
+[ -s "$DEST/token" ] || { echo "BACKUP INCOMPLETE: no token in $DEST (is the bot installed? see the output above)."; exit 1; }
 echo "Backup in: $DEST   (contains SECRETS: keep it private)"
 ls -l "$DEST"

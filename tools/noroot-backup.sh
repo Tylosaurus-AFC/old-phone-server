@@ -17,5 +17,6 @@ ph "cd $OPT && date +%s > last_backup && tar -cf - \$(ls $FILES 2>/dev/null)" | 
 ph "cp ~/server/server.conf /dev/stdout" > "$DEST/noroot-server.conf" 2>/dev/null || true
 ph '~/server/enter.sh "/opt/bot/venv/bin/pip freeze --local" 2>/dev/null' | grep -v -E "overlaps|^Warning" > "$DEST/pip-freeze.txt" || true
 ph '~/server/sa.sh "pm list packages 2>&1 | cat; echo ---; getprop"' > "$DEST/android/packages-and-getprop.txt" || true
+[ -s "$DEST/token" ] || { echo "BACKUP INCOMPLETE: no token in $DEST (is the bot installed on the phone?)."; exit 1; }
 echo "Backup in: $DEST   (contains SECRETS: keep it private)"
 ls -l "$DEST"
