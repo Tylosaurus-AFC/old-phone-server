@@ -45,7 +45,8 @@ passes() {    # passes <n> <conf lines...>
   local n=$1; shift; printf '%s\n' "$@" > "$D/server.conf"
   HOME="$T/home" PREFIX="$T/prefix" PATH="$S:$PATH" ONCE=$n bash "$HERE/phone/noroot/charge.sh" >/dev/null 2>&1
 }
-fresh() { rm -f "$T"/curl.* "$D/botdown" "$D/charge.pid" "$OPT/events.jsonl"; touch "$D/BOT_ENABLED"; }
+fresh() { rm -f "$T"/curl.* "$D/botdown" "$D/charge.pid" "$OPT/events.jsonl"; touch "$D/BOT_ENABLED"
+          echo $(( $(now) - 86400 )) > "$D/boot_time"; }      # booted long ago
 beat_ago() { echo $(( $(now) - $1 )) > "$OPT/heartbeat"; }
 
 fresh; touch "$T/tg_up"; beat_ago 30
@@ -91,6 +92,14 @@ HOME="$T/home" PREFIX="$T/prefix" PATH="$S:/usr/local/bin:/bin" ONCE=1 bash "$HE
 PATH_HAS_CURL=$(PATH="$S:/usr/local/bin:/bin" command -v curl >/dev/null && echo yes || echo no)
 [ "$PATH_HAS_CURL" = no ] && check "no curl installed: the pass still completes" 0 "$RC" || echo "skip - curl is in /bin here"
 mv "$T/curl.off" "$S/curl"
+
+# Just after a reboot the heartbeat on disk is the one from before (maybe hours old) and the
+# bot is still starting: that is not a dead bot
+fresh; touch "$T/tg_up"; beat_ago 7200; now > "$D/boot_time"
+passes 10 "NET_HOSTS=$UP"
+check "just booted with an old heartbeat: no false alarm in the first 10 min" 0 "$(cnt "$T/curl.args" .)"
+passes 7 "NET_HOSTS=$UP"
+check "still no heartbeat 16 min after boot: now it is reported" 1 "$(cnt "$T/curl.args" .)"
 
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

@@ -123,7 +123,8 @@ Pon `NOROOT_SSH=phone`, `NOROOT_IP=…` en `config.sh`. En `$PREFIX/etc/ssh/sshd
      (el fork lo necesita para encender la depuración inalámbrica al arrancar);
    * Ajustes → Apps → **Shizuku** → Batería → **Sin restricciones** (si está congelada, `rish` no responde);
    * en los ajustes de Shizuku activa su **watchdog** y copia el valor `auth` que aparece en **View intents**
-     en `~/server/server.conf` como `SHIZUKU_AUTH=…`: así el vigilante del servidor puede pedirle que arranque;
+     en `~/server/server.conf` como `SHIZUKU_AUTH=…`: así el vigilante del servidor puede pedirle que arranque
+     (**experimental**: solo el fork de thedjchi, de momento probado en simulación, no en un móvil);
    * cuando Android pregunte si permitir la depuración inalámbrica en tu Wi-Fi, elige **Permitir siempre en esta red**.
 
 Sin Shizuku el vigilante sigue funcionando: recurre a Termux:API para la batería y el Wi-Fi, y el

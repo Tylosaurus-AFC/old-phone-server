@@ -38,6 +38,9 @@ WEEKLY_BACKUP=0
 # Automatic restart of Shizuku (thedjchi fork) when its service stops. Copy the value of
 # "auth" from Shizuku > Settings > View intents. Without it the watchdog can only tell you
 # that Shizuku stopped. Keep it private (it lets any app start/stop Shizuku).
+# EXPERIMENTAL: only the thedjchi fork has this START intent, and the restart has been
+# tested in simulation only, not yet on a phone (docs/*/16-*.md). Leave it empty to keep the
+# old behaviour (the server only reports that Shizuku stopped).
 #SHIZUKU_AUTH=
 
 # If the bot stops answering for 15 min (no heartbeat), the watchdog sends you one Telegram

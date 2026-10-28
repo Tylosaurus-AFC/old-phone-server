@@ -26,6 +26,7 @@ only a real phone can confirm. All tests run with `tests/run.sh` (no phone, no n
 | Backup/restore loses files | `test_backup_lists.sh`, `test_tools.sh` | adb/ssh | yes | restore on a spare phone |
 | Downloader update fails / tools broken afterwards | `test_bot.py` SafeUpdate | pip | yes | real pip on ARM |
 | Internet / DNS down | `test_bot.py` ProblemCollection, alerts end-to-end | `internet_ok` | — | real outage |
+| Reboot with an old heartbeat on disk: false "bot dead" alarm | `test_botdown.sh` | clock, curl | yes (previous code alarmed in the first pass) | — |
 | Bot dead or crash-looping (cannot report itself) | `test_botdown.sh` | clock, curl, network | yes (3 mutations) | curl/TLS in Termux |
 | Telegram down, slow or failing during an incident | `test_alerts.py`, `test_botdown.sh` | `send()` / curl | yes | real Bot API errors |
 | Alert storms, flapping, ok→degraded→broken→degraded→ok | `test_alerts.py` | clock | yes (no transient filter) | — |

@@ -21,7 +21,8 @@ durante esta auditoría.
 | Watchdog (reiniciar si el servicio muere) | no | sí, servicio en primer plano opcional [src][wiki] |
 | Intents para otras apps | ninguno para iniciarla | `ManualStartReceiver` exportado, acción `moe.shizuku.privileged.api.START` (y STOP), extra `auth` = un secreto que aparece en *View intents* [src] |
 
-**Consecuencia para el proyecto**: el rearranque automático desde el servidor (`SHIZUKU_AUTH`,
+**Consecuencia para el proyecto**: el rearranque automático desde el servidor — **experimental, opcional,
+probado solo en simulación** — (`SHIZUKU_AUTH`,
 `shizuku.sh start`) solo existe con el fork. El vigilante anota qué variante ve (`variant=` en
 `/opt/bot/sys/shizuku`) y nunca manda START a la oficial [sim]; `doctor.sh` indica la variante y sus límites [sim].
 

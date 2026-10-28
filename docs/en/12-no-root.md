@@ -122,7 +122,8 @@ Set `NOROOT_SSH=phone`, `NOROOT_IP=…` in `config.sh`. In `$PREFIX/etc/ssh/sshd
      (the fork needs it to switch wireless debugging on at boot);
    * Settings → Apps → **Shizuku** → Battery → **Unrestricted** (when it is frozen, `rish` times out);
    * in Shizuku's settings turn on its **watchdog**, and copy the `auth` value shown under **View intents**
-     into `~/server/server.conf` as `SHIZUKU_AUTH=…`: then the server's watchdog can ask Shizuku to start;
+     into `~/server/server.conf` as `SHIZUKU_AUTH=…`: then the server's watchdog can ask Shizuku to start
+     (**experimental**: thedjchi fork only, so far tested in simulation, not on a phone);
    * when Android asks whether to allow wireless debugging on your Wi-Fi, choose **Always allow on this network**.
 
 Without Shizuku the watchdog still runs: it falls back to Termux:API for the battery and Wi-Fi, and

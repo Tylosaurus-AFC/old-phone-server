@@ -20,7 +20,8 @@ audit.
 | Watchdog (restart if the service dies) | no | yes, opt-in foreground service [src][wiki] |
 | Intents for other apps | none to start it | exported `ManualStartReceiver`, action `moe.shizuku.privileged.api.START` (and STOP), extra `auth` = a secret shown under *View intents* [src] |
 
-**Consequence for this project**: automatic restart by the server (`SHIZUKU_AUTH`, `shizuku.sh start`) only
+**Consequence for this project**: automatic restart by the server — **experimental, opt-in, tested in
+simulation only** — (`SHIZUKU_AUTH`, `shizuku.sh start`) only
 exists with the fork. The watchdog now records which variant it sees (`variant=` in `/opt/bot/sys/shizuku`)
 and never sends START to the official app [sim]; `doctor.sh` names the variant and its limits [sim].
 

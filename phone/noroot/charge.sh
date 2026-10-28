@@ -119,7 +119,10 @@ tg_owner() {   # tg_owner "text" -> 0 only if Telegram confirmed the message
 botdown_check() {
   local age
   [ -f $D/BOT_ENABLED ] && [ "${BOTDOWN_ALERT:-1}" != 0 ] || { rm -f $D/botdown; return; }
-  age=$(( NOW - $(int "$(cat $HB 2>/dev/null)") ))
+  # Silence counted from the last heartbeat or from boot, whichever is later: after a
+  # reboot the heartbeat on disk is the old one while the bot is still starting
+  local last; last=$(int "$(cat $HB 2>/dev/null)"); [ "$last" -lt "$BOOT0" ] && last=$BOOT0
+  age=$(( NOW - last ))
   if [ ! -f $HB ] || [ $age -lt 900 ]; then
     rm -f $D/botdown; return                      # alive (or never started yet)
   fi
