@@ -51,6 +51,25 @@ grupo de espera de la app, el «phantom process killer», el wake lock de Termux
 | **Sin memoria** (Android mata el proceso más grande) | `bot.sh` (evento de caída), señal de vida | — | sí: `bot.sh` lo relanza con esperas crecientes; el vigilante relanza `bot.sh` | si se repite, menos descargas en paralelo o plugins |
 | **Bot congelado** | señal de vida de más de 5 min | — | sí: se mata y se relanza | — |
 
+## Avisos automáticos (Telegram)
+
+El bot (en modo root y sin root) evalúa el estado real cada 5 min y escribe al dueño **solo cuando
+cambia** (`bot/alerts.py`):
+
+* **broken** — el servidor no puede hacer su trabajo: sin Internet (se comprueban TCP y DNS), < 300 MB
+  libres, yt-dlp/gallery-dl no arrancan (se ejecutan de verdad, cada 30 min), un `FAIL` de `doctor.sh`.
+  **degraded** — funciona con límites: < 1 GB libre, ≥ 3 reinicios del bot en 6 h, ≥ 5 descargas
+  fallidas en 1 h, un `WARN` de `doctor.sh`. **ok** — nada confirmado.
+* Un problema cuenta tras 2 comprobaciones y 5 min (broken) / 10 min (degraded): los cortes de un minuto
+  se ignoran. Todo lo nuevo va en **un** mensaje con el impacto y qué hacer; los cambios de nivel y las
+  recuperaciones (tras 5 min sin verlo) se cuentan una vez; lo broken se recuerda cada 12 h.
+* Un mensaje solo cuenta como entregado cuando Telegram devuelve su id. Si Telegram (o Internet) falla,
+  los reintentos se espacian (1, 2, 5, 10, 30 min) sin cola de mensajes viejos: el siguiente cuenta el
+  estado actual, cuánto se retrasó y lo que pasó mientras. `/salud` muestra el estado del canal. El estado
+  se guarda en disco (un reinicio no repite nada) y los textos pasan por el filtro de `/diagnostico`.
+* Límites: un bot muerto no puede enviar nada (el mensaje del vigilante para ese caso sigue en la rama de
+  desarrollo), y nada de esto está verificado aún en un móvil.
+
 ### proot frente al chroot con root
 
 proot intercepta llamadas al sistema con `ptrace`: funciona sin root pero añade coste por llamada (no

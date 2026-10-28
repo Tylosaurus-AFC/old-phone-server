@@ -2915,7 +2915,8 @@ OWNER_HELP = ("\n\n👑 <b>Solo tú (por privado)</b>\n"
               "/bateria [<i>N</i>] – batería a detalle: voltaje, salud, cortes de luz y "
               "últimos tramos de carga\n\n"
               "Te aviso por aquí si caducan las cookies, si la batería se calienta, "
-              "si una red falla varias veces o si el móvil se reinicia.")
+              "si una red falla varias veces o si el móvil se reinicia, y cuando el estado del "
+              "servidor cambia (algo deja de funcionar o se arregla), una sola vez por cambio.")
 PUBLIC_COMMANDS = [("mp3", "Solo el audio de un enlace"),
                    ("original", "Fotos/vídeos como archivo, calidad original"),
                    ("pdf", "PDF → una imagen por página"),

@@ -51,6 +51,25 @@ phantom-process killer, the Termux wake lock and wireless debugging.
 | **Out of memory** (Android kills the biggest process) | `bot.sh` (crash event), heartbeat | — | yes: `bot.sh` restarts with back-off; watchdog relaunches `bot.sh` | if it repeats, fewer parallel downloads / plugins |
 | **Bot frozen** | heartbeat older than 5 min | — | yes: killed and restarted | — |
 
+## Automatic alerts (Telegram)
+
+The bot (root and no-root mode alike) evaluates the real state every 5 min and messages the owner
+**only when it changes** (`bot/alerts.py`):
+
+* **broken** — the server cannot do its main job: no Internet (TCP + DNS checked), < 300 MB free,
+  yt-dlp/gallery-dl do not start (actually run, every 30 min), a `FAIL` of `doctor.sh`. **degraded** —
+  it works with limits: < 1 GB free, ≥ 3 bot restarts in 6 h, ≥ 5 failed downloads in 1 h, a `WARN` of
+  `doctor.sh`. **ok** — none confirmed.
+* A problem counts after 2 checks and 5 min (broken) / 10 min (degraded): one-minute blips are ignored.
+  Everything new goes in **one** message with the impact and what to do; level changes and recoveries
+  (after 5 min absent) are announced once; broken problems are reminded every 12 h.
+* A message counts as delivered only when Telegram returns its id. If Telegram (or Internet) is down,
+  retries back off (1, 2, 5, 10, 30 min) with no stale queue: the next message tells the current state,
+  how late it is and what happened meanwhile. `/salud` shows the channel state. The state is saved on
+  disk, so a restart repeats nothing; texts pass through the `/diagnostico` filter (no tokens, IDs, IPs).
+* Limits: a bot that is dead cannot send anything (a watchdog-side message for that case is still on the
+  development branch), and nothing here is verified on a phone yet.
+
 ### proot compared with root's chroot
 
 proot intercepts system calls with `ptrace`: it works without root but adds overhead per system
