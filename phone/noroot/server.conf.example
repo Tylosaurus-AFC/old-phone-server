@@ -31,7 +31,9 @@ WEEKLY_BACKUP=0
 
 # Through Shizuku, every 30 min the watchdog re-applies what keeps Android from freezing or
 # killing Termux: battery-optimisation exemption, background activity, "active" standby
-# bucket, and Android 12+'s phantom-process killer off. 0 = do not touch these settings.
+# bucket, Android 12+'s phantom-process killer off, background activity for Shizuku and its
+# exemption from "unused app" hibernation (inferred from Android's behaviour, not yet
+# verified on a phone). 0 = do not touch these settings.
 # See docs/*/14-*.md.
 #KEEPALIVE=1
 
