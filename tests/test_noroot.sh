@@ -128,6 +128,17 @@ report 50 Charging 10 4200 "80 1" ""
 printf '17x\n' > "$OPT/heartbeat"; run
 check "corrupt heartbeat: the pass completes (exit 0)" 0 "$RC"
 
+# doctor.sh report: a broken run (disk full -> empty output) must not replace the good one
+setup "OEM=" "NET_HOSTS=127.0.0.1"
+report 50 Charging 10 4200 "80 1" ""
+mkdir -p "$OPT/sys"; printf 'RESULT: ok (0 fail, 0 warn) x\nOK   good\n' > "$OPT/sys/doctor.txt"
+printf '#!/bin/sh\nexit 0\n' > "$T/home/server/doctor.sh"; chmod +x "$T/home/server/doctor.sh"
+HOME="$T/home" PREFIX="$T/prefix" PATH="$S:$PATH" ONCE=1 bash -c "sed 's/^DOC_AT=.*/DOC_AT=0/' '$HERE/phone/noroot/charge.sh' | bash" >/dev/null 2>&1
+check "empty doctor run: the previous report is kept" yes "$(grep -q 'OK   good' "$OPT/sys/doctor.txt" && echo yes || echo no)"
+printf '#!/bin/sh\necho "RESULT: degraded (0 fail, 1 warn) y"\n' > "$T/home/server/doctor.sh"
+HOME="$T/home" PREFIX="$T/prefix" PATH="$S:$PATH" ONCE=1 bash -c "sed 's/^DOC_AT=.*/DOC_AT=0/' '$HERE/phone/noroot/charge.sh' | bash" >/dev/null 2>&1
+check "complete doctor run: the report is replaced" yes "$(grep -q 'RESULT: degraded' "$OPT/sys/doctor.txt" && echo yes || echo no)"
+
 # Keep-alive settings through Shizuku: applied when Shizuku answers, unless KEEPALIVE=0
 setup "OEM=" "NET_HOSTS=127.0.0.1"
 report 50 Charging 10 4200 "80 1" ""

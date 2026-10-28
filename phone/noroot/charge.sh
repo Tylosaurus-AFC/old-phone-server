@@ -207,7 +207,10 @@ while true; do
   fi
   # Health check (doctor.sh) every hour, for the bot's /salud and /diagnostico
   if [ $((NOW - DOC_AT)) -ge 3600 ] && [ -x $D/doctor.sh ]; then
-    $D/doctor.sh > $SYS/doctor.txt.tmp 2>&1; mv $SYS/doctor.txt.tmp $SYS/doctor.txt
+    # replaced only by a complete report: with the disk full the new one is empty or cut
+    $D/doctor.sh > $SYS/doctor.txt.tmp 2>&1
+    if grep -q '^RESULT: ' $SYS/doctor.txt.tmp 2>/dev/null; then mv $SYS/doctor.txt.tmp $SYS/doctor.txt
+    else rm -f $SYS/doctor.txt.tmp; fi
     DOC_AT=$NOW
   fi
   # Shell-side guardian (guard.sh): if Android closes Termux, it opens it again. Relaunched

@@ -79,6 +79,11 @@ grants them `WRITE_SECURE_SETTINGS`). Open Termux:Boot **once** by hand.
 * **Developer options → Wireless debugging: on**, and "Disable adb authorization timeout".
 * Realme/OPPO only: **Developer options → Disable permission monitoring: On** (without it ColorOS
   limits adb/Shizuku permissions).
+* **Developer options → Default USB configuration: Charging only** (or "No data transfer"): switching
+  USB mode, e.g. plugging the phone into a PC or a hub, stops Shizuku (its own troubleshooting guide).
+* **Screen lock**: with a PIN, pattern or password, after *any* reboot (power cut, update) nothing starts
+  until someone unlocks the phone — Android keeps app data encrypted until then. On a dedicated server
+  phone use *Swipe* or *None*, or accept unlocking it after each reboot (see [14](14-no-root-reliability.md)).
 
 ### 3. SSH into Termux
 

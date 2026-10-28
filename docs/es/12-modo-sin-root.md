@@ -80,6 +80,13 @@ GitHub: Termux 0.118.3, Boot 0.8.1, API 0.53.0, instaladas con `adb install -g` 
   autorización de adb».
 * Solo Realme/OPPO: **Opciones de desarrollador → Disable permission monitoring: On** (sin eso ColorOS limita
   los permisos de adb/Shizuku).
+* **Opciones de desarrollador → Configuración USB predeterminada: Solo carga** (o «Sin transferencia de
+  datos»): cambiar de modo USB, por ejemplo al enchufarlo a un PC o a un hub, detiene Shizuku (lo dice su propia
+  guía de problemas).
+* **Bloqueo de pantalla**: con PIN, patrón o contraseña, tras *cualquier* reinicio (corte de luz, actualización)
+  no arranca nada hasta que alguien desbloquee el móvil — Android mantiene cifrados los datos de las apps hasta
+  entonces. En un móvil servidor dedicado usa *Deslizar* o *Ninguno*, o asume desbloquearlo tras cada reinicio
+  (ver [14](14-sin-root-fiabilidad.md)).
 
 ### 3. SSH a Termux
 
