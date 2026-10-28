@@ -57,7 +57,7 @@ tools/enable-bot.sh            # go!  then send /start to your bot — the first
 
 ## Quick start — no-root mode
 
-You need: a modern phone (Android 11+ recommended), a PC with `adb`, `ssh` and bash. First, by hand (the
+You need: a modern phone (Android 13+ recommended; on 11–12 you tap *Allow* after every reboot), a PC with `adb`, `ssh` and bash. First, by hand (the
 [guide](docs/en/12-no-root.md) walks through it): install Termux, Termux:Boot and Termux:API from GitHub/F-Droid,
 exempt them from battery limits, set up SSH into Termux and Shizuku (thedjchi fork) + `rish`. Then:
 

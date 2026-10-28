@@ -98,9 +98,9 @@ check "Android 14, child-process killer on: WARN (degraded)" "degraded yes" "$(f
 setup; android maxph=32; FAKE_SDK=31 FAKE_REL=12 run
 check "Android 12, phantom limit 32: WARN" yes "$(has "limit of 32 shared by all apps")"
 setup; android maxph=2147483647; FAKE_SDK=31 FAKE_REL=12 run
-check "Android 12, limit raised: OK" "ok yes" "$(first) $(has "phantom process limit raised")"
+check "Android 12, limit raised: OK line (overall degraded: Android 12 needs a tap after reboots)" "degraded yes" "$(first) $(has "OK   phantom process limit raised")"
 setup; android phantom=true; FAKE_SDK=30 FAKE_REL=11 run
-check "Android 11: no phantom check at all" "ok no" "$(first) $(has "phantom")"
+check "Android 11: no phantom check at all" "no" "$(has "phantom")"
 
 setup; android wake=0; run
 check "no wake lock: WARN" yes "$(has "no Termux wake lock")"
@@ -134,6 +134,10 @@ check "800 MB free: WARN" "degraded yes" "$(first) $(has "WARN 800 MB free")"
 
 setup; FAKE_SDK=23 FAKE_REL=6.0 run
 check "Android 6: FAIL, use root mode" "broken yes" "$(first) $(has "use root mode")"
+setup; FAKE_SDK=31 FAKE_REL=12 run
+check "Android 12: WARN, tap Allow for wireless debugging after each reboot" yes "$(has "tap Allow on that dialog")"
+setup; FAKE_SDK=33 FAKE_REL=13 run
+check "Android 13: no wireless-debugging reboot warning" no "$(has "tap Allow on that dialog")"
 setup; FAKE_SDK=29 FAKE_REL=10 run
 check "Android 10: WARN, Shizuku cannot autostart" yes "$(has "cannot start by itself at boot")"
 setup; FAKE_ARCH=x86_64 run

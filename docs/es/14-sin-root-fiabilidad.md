@@ -43,7 +43,7 @@ grupo de espera de la app, el «phantom process killer», el wake lock de Termux
 | **Gestor de tareas del fabricante** (Xiaomi, Huawei, Vivo, Oppo/Realme, Samsung…) | indirectamente: falta el vigilante o el bot, `/historial` | ajustes del fabricante (perfiles abajo) | en parte: guard.sh reabre Termux (probado en Realme) | aplicar los ajustes de tu marca |
 | **Termux cerrado o quitado de recientes** | guard.sh (sin `sshd` 2 min) | wake lock + exenciones | **sí, con Shizuku**: guard.sh abre Termux y `~/.bashrc` relanza el servidor (Realme: 2 min 9 s, con «forzar detención»). Volver a ejecutar el arranque ya no crea un segundo bucle vigilante | — |
 | **Termux:Boot forzado a detenerse o nunca abierto** | doctor (`stopped=true` / `notLaunched=true`) | — | **no**: Android no entrega el aviso de arranque a una app detenida | abrir Termux:Boot una vez |
-| **Reinicio normal**, por fallo o por actualización | `/historial` «el móvil se encendió» | Termux:Boot; Shizuku (fork de thedjchi) arranca solo por depuración inalámbrica en Android 11+ | sí (Realme: bot a los 54–104 s) | evitar actualizaciones automáticas nocturnas del sistema (pueden cambiar ajustes) |
+| **Reinicio normal**, por fallo o por actualización | `/historial` «el móvil se encendió» | Termux:Boot; Shizuku arranca solo por depuración inalámbrica: en Android 13+ sin intervención; en Android 11–12 solo tras pulsar *Permitir* (olvidan las redes autorizadas al reiniciar) | sí (Realme: bot a los 54–104 s) | evitar actualizaciones automáticas nocturnas del sistema (pueden cambiar ajustes) |
 | **Batería agotada / móvil apagado** | se detectan los cortes de luz mientras funciona; nada mientras está apagado | tenerlo enchufado; límite de carga del fabricante | **no**: casi todos los móviles se quedan apagados (o en la pantalla de carga) hasta pulsar el botón. Encender solo necesita el bootloader desbloqueado o una opción del fabricante | pulsar el botón; después todo lo anterior se aplica |
 | **Se pierde el Wi-Fi / Internet** | vigilante cada minuto; bucle del bot | — | sí: el bot espera y sigue; 5 min sin red → reinicia el Wi-Fi (Shizuku o Termux:API) | revisar el router si dura |
 | **Shizuku parado** (raro; Wi-Fi apagado al arrancar, depuración inalámbrica apagada) | evento del vigilante; doctor | guard.sh mantiene la depuración inalámbrica | el fork se reinicia solo con la depuración inalámbrica activa | abrir Shizuku y arrancarlo |
@@ -162,7 +162,7 @@ compatible o no garantizable.
 |---|---|---|---|---|---|
 | Termux + Debian en proot, el bot funciona | D | D | D | D | **V** |
 | Arranque tras reiniciar (Termux:Boot) | D | D | D | D | **V** |
-| Shizuku arranca solo al encender | N (arranque manual) | D | D | D | **V** |
+| Shizuku arranca solo al encender | N (arranque manual) | N (pulsar *Permitir* tras cada reinicio) | N (pulsar *Permitir* tras cada reinicio) | 12L: N; 13–15: D | **V** |
 | guard.sh reabre un Termux cerrado | N sin Shizuku | D | D | D | **V** |
 | Ajustes anti-cierre reaplicados y comprobados | N sin Shizuku | S | S | S | S (nuevo; falta prueba física) |
 | Estado de Shizuku y rearranque con el aviso START | N (Android < 11: sin depuración inalámbrica) | S | S | S | S (falta prueba física) |
