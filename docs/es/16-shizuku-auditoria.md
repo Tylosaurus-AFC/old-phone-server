@@ -80,6 +80,7 @@ fabricantes, sí. Termux:Boot no es `directBootAware`: nada del servidor corre a
 | Termux detenido o eliminado | guard.sh (sin `sshd` 2 min) | **sí con Shizuku**: guard.sh reabre Termux [V en Realme: 2 min 9 s] | — |
 | Termux:Boot nunca abierto / forzado a detenerse | doctor (`stopped=`/`notLaunched=`) [sim] | **no** [doc] | abrir Termux:Boot una vez |
 | Falta `WRITE_SECURE_SETTINGS` | doctor (`dumpsys package`) [sim] | no | el comando `pm grant` desde un PC |
+| Shizuku hibernada tras meses sin abrirse (Android 12+; se compila con SDK 36/37, las apps de Termux con 28 y no les afecta [doc]) | doctor (`AUTO_REVOKE_PERMISSIONS_IF_UNUSED`) [sim] | el vigilante pone la exención cada 30 min mientras Shizuku funciona [sim]; efecto real sin verificar | Ajustes → Apps → Shizuku → desactivar «Pausar actividad de la app si no se usa» |
 | Restricciones de batería en Termux o Shizuku | doctor [sim] | se reaplican cada 30 min mientras Shizuku funciona [sim]; un rechazo se avisa una vez | Ajustes → Batería → Sin restricciones |
 
 Por versión de Android:

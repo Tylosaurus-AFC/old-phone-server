@@ -69,7 +69,10 @@ detached() { timeout -s KILL 20 $D/rish -c "setsid sh -c '$1' </dev/null >/dev/n
 # allowed, "active" standby bucket, and the child-process killer off (Android 12L+: a
 # setting; Android 12: a device_config limit that Google Play services may reset, so it is
 # simply set again every 30 min instead of disabling the config sync).
-# The Shizuku app itself is exempted too: when Android freezes it, rish times out.
+# The Shizuku app itself is exempted too: when Android freezes it, rish times out. It is
+# also kept out of "unused app" hibernation (Android 12+; it targets SDK 36/37 and is rarely
+# opened, so months later Android could stop it and it would not start at boot): the appop
+# behind Settings > Apps > Shizuku > "Pause app activity if unused".
 # After applying, the values are read back in the same call: a setting Android or the maker
 # refuses is reported once (event "aviso") and then retried less and less often (30 min,
 # 1 h, 2 h... up to 6 h) instead of hammering it every pass.
@@ -79,6 +82,7 @@ keepalive() {
       for p in com.termux com.termux.boot com.termux.api moe.shizuku.privileged.api; do dumpsys deviceidle whitelist +$p 2>&1 | cat; done
       cmd appops set com.termux RUN_ANY_IN_BACKGROUND allow 2>&1 | cat
       for o in RUN_IN_BACKGROUND RUN_ANY_IN_BACKGROUND; do cmd appops set moe.shizuku.privileged.api $o allow 2>&1 | cat; done
+      for p in moe.shizuku.privileged.api com.termux.boot; do cmd appops set $p AUTO_REVOKE_PERMISSIONS_IF_UNUSED ignore 2>&1 | cat; done
       am set-standby-bucket com.termux active 2>&1 | cat
       S=$(getprop ro.build.version.sdk)
       if [ "$S" -ge 32 ]; then settings put global settings_enable_monitor_phantom_procs false 2>&1 | cat

@@ -132,6 +132,7 @@ else
     echo "shzver=$(dumpsys package moe.shizuku.privileged.api 2>&1 | grep -m1 -o "versionName=[^ ]*" | sed "s/versionName=//")"
     echo "shzbg=$(cmd appops get moe.shizuku.privileged.api RUN_ANY_IN_BACKGROUND 2>&1 | head -1)"
     echo "adbtimeout=$(settings get global adb_allowed_connection_time 2>&1)"
+    echo "shzunused=$(cmd appops get moe.shizuku.privileged.api AUTO_REVOKE_PERMISSIONS_IF_UNUSED 2>&1 | head -1)"
     echo "cred=$(dumpsys lock_settings 2>&1 | grep -m1 -ioE "CredentialType: *[A-Za-z_]+" | sed "s/.*: *//")"' | tr -d '\r')
   v() { echo "$Q" | sed -n "s/^$1=//p" | head -1; }
   if [ "$(v boot)" != 1 ]; then
@@ -189,6 +190,11 @@ else
   case "$(v shzbg)" in
     *ignore*|*deny*) warn "the Shizuku app may not run in the background" \
                           "adb shell cmd appops set moe.shizuku.privileged.api RUN_ANY_IN_BACKGROUND allow (the watchdog also sets it)" ;;
+  esac
+  case "$(v shzunused)" in
+    *ignore*) ok "Shizuku exempt from 'pause app activity if unused'" ;;
+    *allow*|*default*) [ "$SDK" -ge 31 ] && warn "Android may hibernate Shizuku after months without opening it (then it no longer starts at boot)" \
+        "Settings > Apps > Shizuku > turn off 'Pause app activity if unused' (the watchdog also sets it)" ;;
   esac
   case "$(v adbtimeout)" in
     0) ok "adb authorisation timeout disabled" ;;

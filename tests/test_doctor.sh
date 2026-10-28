@@ -64,7 +64,8 @@ android() {   # android [key=value...]: the Shizuku report, healthy unless overr
   declare -A A=([boot]=1 [bootstate]=stopped=false [bootnl]=notLaunched=false [api]=1 [idle]=1
                 [bg]="RUN_ANY_IN_BACKGROUND: allow" [bucket]=10 [phantom]=false [maxph]=null [wake]=1 [adbwifi]=1
                 [shzidle]=1 [shzwss]=1 [cred]=NONE [shzver]=13.7.0-thedjchi
-                [shzbg]="RUN_ANY_IN_BACKGROUND: allow" [adbtimeout]=0)
+                [shzbg]="RUN_ANY_IN_BACKGROUND: allow" [adbtimeout]=0
+                [shzunused]="AUTO_REVOKE_PERMISSIONS_IF_UNUSED: ignore")
   for kv in "$@"; do A[${kv%%=*}]="${kv#*=}"; done
   : > "$T/android"; for k in "${!A[@]}"; do echo "$k=${A[$k]}" >> "$T/android"; done
 }
@@ -189,6 +190,11 @@ FAKE_SHIZUKU=0 FAKE_RISH=not-running run
 check "official Shizuku stopped: says the server cannot start it" yes "$(has "the official Shizuku cannot be started by the server")"
 setup; touch "$T/home/server/no-shizuku-restart"; FAKE_SHIZUKU=0 FAKE_RISH=not-running run
 check "restart paused on purpose: says so" yes "$(has "automatic restart paused")"
+
+setup; android "shzunused=AUTO_REVOKE_PERMISSIONS_IF_UNUSED: allow"; run
+check "Shizuku can be hibernated after months unused (Android 12+): WARN" yes "$(has "Pause app activity if unused")"
+setup; android "shzunused=AUTO_REVOKE_PERMISSIONS_IF_UNUSED: allow"; FAKE_SDK=30 FAKE_REL=11 run
+check "Android 11: no hibernation warning (hibernation starts in 12)" no "$(has "Pause app activity if unused")"
 
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

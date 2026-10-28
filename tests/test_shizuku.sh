@@ -181,6 +181,7 @@ fresh ok; touch "$T/shz_up"; rm -f "$T/keep.cmd"
 printf 'chk_sdk=34\nchk_idle=1\nchk_bg=RUN_ANY_IN_BACKGROUND: allow\nchk_phantom=false\nchk_maxph=null\n' > "$T/keep.out"
 passes 1 "NET_HOSTS=$UP"
 check "keep-alive also lets the Shizuku app run in the background (its wiki's advice)" 1 "$(cnt "$T/keep.cmd" 'cmd appops set moe.shizuku.privileged.api $o allow')"
+check "keep-alive keeps Shizuku out of unused-app hibernation" 1 "$(cnt "$T/keep.cmd" 'AUTO_REVOKE_PERMISSIONS_IF_UNUSED ignore')"
 
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

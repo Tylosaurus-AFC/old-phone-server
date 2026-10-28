@@ -80,6 +80,7 @@ before the first unlock [src].
 | Termux stopped or killed | guard.sh (no `sshd` 2 min) | **yes with Shizuku**: guard.sh reopens Termux [V on Realme: 2 min 9 s] | — |
 | Termux:Boot never opened / force-stopped | doctor (`stopped=`/`notLaunched=`) [sim] | **no** [doc] | open Termux:Boot once |
 | `WRITE_SECURE_SETTINGS` missing | doctor (`dumpsys package`) [sim] | no | the `pm grant` command from a PC |
+| Shizuku hibernated after months unused (Android 12+; it targets SDK 36/37, Termux apps target 28 and are not affected [doc]) | doctor (`AUTO_REVOKE_PERMISSIONS_IF_UNUSED`) [sim] | the watchdog sets the exemption every 30 min while Shizuku works [sim]; effect on a real phone unverified | Settings → Apps → Shizuku → turn off "Pause app activity if unused" |
 | Battery restrictions on Termux or Shizuku | doctor [sim] | re-applied every 30 min while Shizuku works [sim]; a refusal is reported once | Settings → Battery → Unrestricted |
 
 By Android version:
