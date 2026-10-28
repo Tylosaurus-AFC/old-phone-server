@@ -34,6 +34,11 @@ if [ "$SDK" -lt 24 ]; then
 elif [ "$SDK" -lt 30 ]; then
   warn "Android $REL (SDK $SDK): Shizuku cannot start by itself at boot below Android 11" \
        "after every reboot open Shizuku and start it, or use root mode on this phone"
+elif [ "$SDK" -lt 33 ]; then
+  # Android 11-12(L) forget the networks allowed for wireless debugging on every reboot
+  # (fixed in Android 13, AOSP change 2128832; Shizuku's own sources say so)
+  warn "Android $REL (SDK $SDK): after every reboot Android asks again to allow wireless debugging on your Wi-Fi" \
+       "after each reboot unlock the phone and tap Allow on that dialog; Shizuku then starts (Android 13+ remembers it)"
 else
   ok "Android $REL (SDK $SDK), $BRAND"
 fi

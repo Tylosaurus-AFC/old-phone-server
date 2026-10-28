@@ -12,14 +12,14 @@ It was built and tested end to end on a **Realme 12+ 5G** (Android 16, Realme UI
 
 | | Root mode (chroot) | **No-root mode (Termux + proot)** |
 |---|---|---|
-| Needs | root ([02](02-root.md)) | nothing special; Android **11+ recommended** |
+| Needs | root ([02](02-root.md)) | nothing special; Android **13+ recommended** (11–12 work, but after every reboot you must tap *Allow* for wireless debugging) |
 | Speed | native | proot adds overhead per system call; on a modern phone it is not noticeable (Realme: the same download times as the root tablet) |
 | Charge control | the script switches the charger | **only the maker's own limit** (e.g. "limit to 80 %"); the script reports it |
 | Reading battery, Wi-Fi, uptime | direct from `/sys`, `iw` | not allowed to apps: Shizuku reads them and `charge.sh` hands them to the bot |
 | Reboot / Wi-Fi restart from the bot | yes | yes **with Shizuku**; without it, no reboot |
 | Survives reboot | boot launcher as root | Termux:Boot (must be opened once by hand) |
 | Android kills background apps | no | it *can*: the guardian reopens Termux (tested) |
-| Old phones | **yes, down to Android 4.4** | no: Termux needs Android 7+, auto-started Shizuku needs 11+ |
+| Old phones | **yes, down to Android 4.4** | no: Termux needs Android 7+, Shizuku starting by itself after a reboot needs 13+ (11–12: one tap each reboot) |
 
 Rule of thumb: **old phone (≤ Android 10) → root mode. Modern phone you cannot or will not
 root → this page.** (For a no-root server without a bot, see also the projects listed in
@@ -106,7 +106,10 @@ Set `NOROOT_SSH=phone`, `NOROOT_IP=…` in `config.sh`. In `$PREFIX/etc/ssh/sshd
 ### 4. Shizuku
 
 1. Install the **thedjchi fork of Shizuku** (GitHub `thedjchi/Shizuku`; tested: 13.7.0). The official
-   Shizuku can only start by itself at boot on rooted phones; the fork starts through wireless debugging.
+   Shizuku (v13.6.0, May 2025) also starts at boot through wireless debugging on Android 13+, but tries only
+   once, right at boot, without waiting for Wi-Fi; the fork waits for Wi-Fi, retries, has a watchdog and a
+   START intent. Both use the same package name, `moe.shizuku.privileged.api` (the fork's version ends in
+   `-thedjchi`); they are signed differently, so switching means uninstalling the other first.
 2. In Shizuku: *Start via wireless debugging* (pair once), and enable **start on boot**.
 3. In Shizuku: *Use Shizuku in terminal apps* → export `rish` and `rish_shizuku.dex`; authorise **Termux**.
 4. Copy both files to a folder on your PC and run:

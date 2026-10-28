@@ -43,7 +43,7 @@ phantom-process killer, the Termux wake lock and wireless debugging.
 | **Termux swiped from recents / closed by Android** | guard.sh (no `sshd` for 2 min) | wake lock + exemptions | **yes with Shizuku**: guard.sh opens Termux; `~/.bashrc` restarts the server (Realme: 2 min 9 s). Re-running the boot hook no longer starts a duplicate watchdog loop | — |
 | **Termux force-stopped** (Settings → Force stop) | guard.sh | — | yes, as above (Realme test) | — |
 | **Termux:Boot force-stopped or never opened** | doctor (`stopped=true` / `notLaunched=true`) | — | **no**: Android delivers no boot event to a stopped app | open Termux:Boot once |
-| **Normal reboot**, crash reboot, update reboot | `/historial` "el móvil se encendió" | Termux:Boot hook; Shizuku (thedjchi fork) starts itself through wireless debugging on Android 11+ | yes (Realme: bot at 54–104 s) | avoid automatic overnight system updates (they can change settings) |
+| **Normal reboot**, crash reboot, update reboot | `/historial` "el móvil se encendió" | Termux:Boot hook; Shizuku starts itself through wireless debugging: Android 13+ unattended; Android 11–12 only after you tap *Allow* (they forget allowed networks on reboot) | yes (Realme: bot at 54–104 s) | avoid automatic overnight system updates (they can change settings) |
 | **Battery fully drained / phone off** | power-cut detection while running; nothing while off | keep it plugged in; maker's charge limit | **no**: most phones stay off (or in the charging screen) until the power button is pressed. Auto power-on needs an unlocked bootloader or a vendor option | press power; then everything above applies |
 | **Wi-Fi / Internet lost** | watchdog every minute; bot loop | — | yes: bot waits and resumes; 5 min offline → Wi-Fi cycled (Shizuku or Termux:API) | check the router if it lasts |
 | **Shizuku stopped** (rare; Wi-Fi off at boot, wireless debugging off) | watchdog event; doctor | guard.sh keeps wireless debugging on | the fork restarts itself when wireless debugging is on | open Shizuku and start it |
@@ -115,7 +115,7 @@ not guaranteed.
 |---|---|---|---|---|---|
 | Termux + proot Debian, bot runs | D | D | D | D | **V** |
 | Start after reboot (Termux:Boot) | D | D | D | D | **V** |
-| Shizuku starts by itself at boot | N (manual start each boot) | D | D | D | **V** |
+| Shizuku starts by itself at boot | N (manual start each boot) | N (tap *Allow* after each reboot) | N (tap *Allow* after each reboot) | 12L: N; 13–15: D | **V** |
 | guard.sh reopens a closed Termux | N without Shizuku | D | D | D | **V** |
 | Keep-alive settings re-applied | N without Shizuku | S | S | S | S (new; physical test pending) |
 | Phantom killer handled | not needed | not needed | S (limit re-applied) | S (setting) | S |

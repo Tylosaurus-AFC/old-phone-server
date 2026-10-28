@@ -12,14 +12,14 @@ bootloader bloqueado: el intento de root falló). Todo lo de esta página se ver
 
 | | Modo root (chroot) | **Modo sin root (Termux + proot)** |
 |---|---|---|
-| Necesita | root ([02](02-root.md)) | nada especial; se recomienda Android **11+** |
+| Necesita | root ([02](02-root.md)) | nada especial; se recomienda Android **13+** (11–12 funcionan, pero tras cada reinicio hay que pulsar *Permitir* para la depuración inalámbrica) |
 | Velocidad | nativa | proot añade coste por llamada al sistema; en un móvil moderno no se nota (Realme: mismos tiempos de descarga que la tablet con root) |
 | Control de carga | el script conmuta el cargador | **solo el límite del propio fabricante** (p. ej. «limitar al 80 %»); el script lo informa |
 | Leer batería, Wi-Fi, tiempo encendido | directo de `/sys`, `iw` | las apps no pueden: lo lee Shizuku y `charge.sh` se lo pasa al bot |
 | Reiniciar / reiniciar Wi-Fi desde el bot | sí | sí **con Shizuku**; sin él, no se puede reiniciar el móvil |
 | Sobrevive a un reinicio | lanzador de arranque como root | Termux:Boot (hay que abrirlo una vez a mano) |
 | Android mata apps en segundo plano | no | *puede*: el guardián vuelve a abrir Termux (probado) |
-| Móviles viejos | **sí, hasta Android 4.4** | no: Termux pide Android 7+, Shizuku con arranque automático pide 11+ |
+| Móviles viejos | **sí, hasta Android 4.4** | no: Termux pide Android 7+, que Shizuku arranque solo tras reiniciar pide 13+ (11–12: un toque en cada reinicio) |
 
 Regla práctica: **móvil viejo (≤ Android 10) → modo root. Móvil moderno que no puedes o no quieres
 rootear → esta página.** (Para un servidor sin root y sin bot, mira también los proyectos de
@@ -106,8 +106,11 @@ Pon `NOROOT_SSH=phone`, `NOROOT_IP=…` en `config.sh`. En `$PREFIX/etc/ssh/sshd
 
 ### 4. Shizuku
 
-1. Instala el **fork de thedjchi de Shizuku** (GitHub `thedjchi/Shizuku`; probado: 13.7.0). La Shizuku oficial solo
-   arranca sola al encender en móviles con root; el fork arranca por depuración inalámbrica.
+1. Instala el **fork de thedjchi de Shizuku** (GitHub `thedjchi/Shizuku`; probado: 13.7.0). La Shizuku oficial
+   (v13.6.0, mayo de 2025) también arranca al encender por depuración inalámbrica en Android 13+, pero lo
+   intenta una sola vez, nada más arrancar y sin esperar al Wi-Fi; el fork espera al Wi-Fi, reintenta, tiene
+   watchdog y un aviso START. Las dos usan el mismo paquete, `moe.shizuku.privileged.api` (la versión del fork
+   termina en `-thedjchi`); están firmadas distinto, así que para cambiar hay que desinstalar la otra antes.
 2. En Shizuku: *Iniciar por depuración inalámbrica* (empareja una vez) y activa **iniciar al arrancar**.
 3. En Shizuku: *Usar Shizuku en apps de terminal* → exporta `rish` y `rish_shizuku.dex`; autoriza a **Termux**.
 4. Copia los dos archivos a una carpeta de tu PC y ejecuta:
