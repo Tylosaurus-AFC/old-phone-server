@@ -121,5 +121,6 @@ backups and restore, and a documented recovery procedure for every failure we hi
 | 11 | [FAQ and safety](11-faq-and-safety.md) | legal, security, risks, common questions |
 | 12 | [No-root mode](12-no-root.md) | the same server with Termux + proot + Shizuku, no root needed |
 | 14 | [No-root 24/7](14-no-root-reliability.md) | limits of no-root mode, defences, `doctor.sh`, Shizuku recovery, alerts, compatibility matrix |
+| 16 | [Shizuku audit](16-shizuku-audit.md) | official vs fork, recovery matrix per Android version |
 | 15 | [WhatsApp evaluation](15-whatsapp-evaluation.md) | a second channel: options, costs, risks (not implemented) |
 | 13 | [Media recipes](13-media-recipes.md) | optional NAS / DLNA / Jellyfin / YouTube mirror on a USB disk |

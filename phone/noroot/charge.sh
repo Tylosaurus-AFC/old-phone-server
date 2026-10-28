@@ -78,6 +78,7 @@ keepalive() {
   out=$(sa '# keepalive
       for p in com.termux com.termux.boot com.termux.api moe.shizuku.privileged.api; do dumpsys deviceidle whitelist +$p 2>&1 | cat; done
       cmd appops set com.termux RUN_ANY_IN_BACKGROUND allow 2>&1 | cat
+      for o in RUN_IN_BACKGROUND RUN_ANY_IN_BACKGROUND; do cmd appops set moe.shizuku.privileged.api $o allow 2>&1 | cat; done
       am set-standby-bucket com.termux active 2>&1 | cat
       S=$(getprop ro.build.version.sdk)
       if [ "$S" -ge 32 ]; then settings put global settings_enable_monitor_phantom_procs false 2>&1 | cat
@@ -134,6 +135,10 @@ botdown_check() {
 }
 
 # Shizuku state, for the bot (/salud, alerts) and doctor.sh: $SYS/shizuku (key=value).
+# Which Shizuku: the official app and the thedjchi fork share the package name; only the
+# fork's versionName ends in "-thedjchi", and only the fork has the START receiver. Read
+# while Shizuku works (dumpsys needs it) and remembered across restarts in $SYS/shizuku.
+# A user who stops Shizuku on purpose creates ~/server/no-shizuku-restart: no START then.
 # When it is down: why (shizuku.sh probe), checks only every 5 min after the first 10 min
 # (each failed check costs ~40 s of rish time-outs), and, if SHIZUKU_AUTH is set, asks the
 # fork to start itself with growing gaps (2, 5, 10, 30 min, then every 30 min), never
@@ -141,6 +146,10 @@ botdown_check() {
 shizuku_check() {
   adb_find; HAVE=$?
   if [ $HAVE = 0 ]; then
+    if [ "$SHZ_STATE" != ok ] || [ -z "$SHZ_VERSION" ]; then
+      SHZ_VERSION=$(sa 'dumpsys package moe.shizuku.privileged.api 2>&1 | grep -m1 -o "versionName=[^ ]*"' | tr -d '\r' | sed 's/^versionName=//')
+      case "$SHZ_VERSION" in *thedjchi*) SHZ_VARIANT=fork ;; "") ;; *) SHZ_VARIANT=official ;; esac
+    fi
     SHZ_STATE=ok SHZ_DETAIL="" SHZ_SINCE=0 SHZ_TRIES=0 SHZ_TRY_AT=0 SHZ_CHECK_AT=0
   else
     P=$(bash $D/shizuku.sh probe 2>/dev/null)          # one rish call: state + detail
@@ -151,7 +160,8 @@ shizuku_check() {
     [ $((NOW - SHZ_SINCE)) -ge 600 ] && SHZ_CHECK_AT=$((NOW + 300))
     case "$SHZ_STATE" in
       not-running|app-unreachable)
-        if [ -n "${SHIZUKU_AUTH:-}" ] && [ $NOW -ge $SHZ_TRY_AT ] && [ $((NOW - BOOT0)) -ge 300 ] && online; then
+        if [ -n "${SHIZUKU_AUTH:-}" ] && [ "$SHZ_VARIANT" != official ] && [ ! -f $D/no-shizuku-restart ] \
+           && [ $NOW -ge $SHZ_TRY_AT ] && [ $((NOW - BOOT0)) -ge 300 ] && online; then
           SHZ_TRIES=$((SHZ_TRIES + 1))
           if bash $D/shizuku.sh start; then ev adb "Shizuku parado ($SHZ_STATE): le pido que arranque (intento $SHZ_TRIES)"
           else ev aviso "no pude mandar la orden de arranque a Shizuku (intento $SHZ_TRIES)"; fi
@@ -160,13 +170,16 @@ shizuku_check() {
         fi ;;
     esac
   fi
-  printf 'state=%s\nsince=%s\ntries=%s\nauth=%s\nchecked=%s\nboot=%s\ndetail=%s\n' "$SHZ_STATE" "$SHZ_SINCE" \
-    "$SHZ_TRIES" "$([ -n "${SHIZUKU_AUTH:-}" ] && echo 1 || echo 0)" "$NOW" "$BOOT0" "$SHZ_DETAIL" > $SYS/shizuku.tmp \
+  printf 'state=%s\nsince=%s\ntries=%s\nauth=%s\nchecked=%s\nboot=%s\ndetail=%s\nvariant=%s\nversion=%s\npaused=%s\n' \
+    "$SHZ_STATE" "$SHZ_SINCE" "$SHZ_TRIES" "$([ -n "${SHIZUKU_AUTH:-}" ] && echo 1 || echo 0)" "$NOW" "$BOOT0" \
+    "$SHZ_DETAIL" "$SHZ_VARIANT" "$SHZ_VERSION" "$([ -f $D/no-shizuku-restart ] && echo 1 || echo 0)" > $SYS/shizuku.tmp \
     && mv $SYS/shizuku.tmp $SYS/shizuku
 }
 
 NETFAIL=0 NETDOWN=0 HUNG_UNTIL=0 WAS="" ADBWAS="" KEEP_AT=0 KEEP_FAIL=0 HAVE=1
 SHZ_STATE=unknown SHZ_DETAIL="" SHZ_SINCE=0 SHZ_TRIES=0 SHZ_TRY_AT=0 SHZ_CHECK_AT=0
+SHZ_VARIANT=$(sed -n 's/^variant=//p' $SYS/shizuku 2>/dev/null)     # known from a previous run
+SHZ_VERSION=$(sed -n 's/^version=//p' $SYS/shizuku 2>/dev/null)
 DOC_AT=$(( $(date +%s) - 3000 ))   # first check 10 min after start: Shizuku needs time at boot
 BOOT0=$(cat $D/boot_time 2>/dev/null || date +%s)
 

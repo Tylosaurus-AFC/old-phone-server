@@ -63,7 +63,8 @@ android() {   # android [key=value...]: the Shizuku report, healthy unless overr
   local k
   declare -A A=([boot]=1 [bootstate]=stopped=false [bootnl]=notLaunched=false [api]=1 [idle]=1
                 [bg]="RUN_ANY_IN_BACKGROUND: allow" [bucket]=10 [phantom]=false [maxph]=null [wake]=1 [adbwifi]=1
-                [shzidle]=1 [shzwss]=1 [cred]=NONE)
+                [shzidle]=1 [shzwss]=1 [cred]=NONE [shzver]=13.7.0-thedjchi
+                [shzbg]="RUN_ANY_IN_BACKGROUND: allow" [adbtimeout]=0)
   for kv in "$@"; do A[${kv%%=*}]="${kv#*=}"; done
   : > "$T/android"; for k in "${!A[@]}"; do echo "$k=${A[$k]}" >> "$T/android"; done
 }
@@ -167,6 +168,27 @@ setup; android cred=PIN; run
 check "screen lock PIN: WARN that nothing starts after a reboot until unlocked" yes "$(has "NOTHING starts until someone unlocks")"
 setup; android cred=; run
 check "lock type unknown (format not found): no lock warning" no "$(has "screen lock")"
+
+# Which Shizuku (official vs thedjchi fork share the package name)
+setup; run
+check "fork detected from its versionName" yes "$(has "Shizuku 13.7.0-thedjchi (thedjchi fork")"
+setup; android shzver=13.6.0.r1086.2650830; run
+check "official Shizuku: WARN that it tries once at boot and cannot be restarted by the server" yes "$(has "official Shizuku 13.6.0.r1086.2650830")"
+check "official Shizuku + SHIZUKU_AUTH: WARN it has no effect" yes "$(has "SHIZUKU_AUTH has no effect")"
+check "official Shizuku: no 'set SHIZUKU_AUTH' advice" no "$(has "View intents")"
+setup; android adbtimeout=604800000; run
+check "adb authorisation timeout on: WARN" yes "$(has "Disable adb authorization timeout")"
+setup; android adbtimeout=null; run
+check "adb authorisation timeout never set (null): WARN" yes "$(has "Disable adb authorization timeout")"
+setup; android "shzbg=RUN_ANY_IN_BACKGROUND: ignore"; run
+check "Shizuku not allowed in background: WARN with the appops command" yes "$(has "appops set moe.shizuku.privileged.api RUN_ANY_IN_BACKGROUND allow")"
+# Shizuku down: what the watchdog remembered about the variant changes the advice
+setup; mkdir -p "$T/prefix/var/lib/proot-distro/containers/bot/rootfs/opt/bot/sys"
+printf 'state=not-running\nvariant=official\n' > "$T/prefix/var/lib/proot-distro/containers/bot/rootfs/opt/bot/sys/shizuku"
+FAKE_SHIZUKU=0 FAKE_RISH=not-running run
+check "official Shizuku stopped: says the server cannot start it" yes "$(has "the official Shizuku cannot be started by the server")"
+setup; touch "$T/home/server/no-shizuku-restart"; FAKE_SHIZUKU=0 FAKE_RISH=not-running run
+check "restart paused on purpose: says so" yes "$(has "automatic restart paused")"
 
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

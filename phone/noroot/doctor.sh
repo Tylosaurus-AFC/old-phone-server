@@ -98,7 +98,11 @@ if [ ! -x $D/rish ] || [ ! -f $D/rish_shizuku.dex ]; then
        "set up Shizuku (docs/*/12-*.md, step 4); meanwhile check Settings > Apps > Termux > Battery = Unrestricted by hand"
 elif [ "$($D/sa.sh 'echo OK')" != OK ]; then
   P=$(bash $D/shizuku.sh probe 2>/dev/null); S=$(echo "$P" | sed -n 1p)
-  AUTO="the watchdog asks it to start by itself"; [ -n "${SHIZUKU_AUTH:-}" ] || AUTO="set SHIZUKU_AUTH (docs/*/14-*.md) so the watchdog can start it by itself"
+  KNOWN=$(sed -n 's/^variant=//p' $OPT/sys/shizuku 2>/dev/null)      # remembered by the watchdog
+  AUTO="the watchdog asks it to start by itself"
+  [ -n "${SHIZUKU_AUTH:-}" ] || AUTO="set SHIZUKU_AUTH (docs/*/14-*.md) so the watchdog can start it by itself"
+  [ "$KNOWN" = official ] && AUTO="the official Shizuku cannot be started by the server (only the thedjchi fork has a START intent)"
+  [ -f $D/no-shizuku-restart ] && AUTO="automatic restart paused (~/server/no-shizuku-restart)"
   case "$S" in
     not-running) warn "Shizuku's service is stopped: no guardian, no reboot from the bot" \
                       "open Shizuku > Start (Wi-Fi on; wireless debugging is turned on by Shizuku itself); $AUTO" ;;
@@ -125,6 +129,9 @@ else
     echo "adbwifi=$(settings get global adb_wifi_enabled 2>&1)"
     echo "shzidle=$(dumpsys deviceidle whitelist 2>&1 | grep -c ",moe.shizuku.privileged.api,")"
     echo "shzwss=$(dumpsys package moe.shizuku.privileged.api 2>&1 | grep -c "WRITE_SECURE_SETTINGS: granted=true")"
+    echo "shzver=$(dumpsys package moe.shizuku.privileged.api 2>&1 | grep -m1 -o "versionName=[^ ]*" | sed "s/versionName=//")"
+    echo "shzbg=$(cmd appops get moe.shizuku.privileged.api RUN_ANY_IN_BACKGROUND 2>&1 | head -1)"
+    echo "adbtimeout=$(settings get global adb_allowed_connection_time 2>&1)"
     echo "cred=$(dumpsys lock_settings 2>&1 | grep -m1 -ioE "CredentialType: *[A-Za-z_]+" | sed "s/.*: *//")"' | tr -d '\r')
   v() { echo "$Q" | sed -n "s/^$1=//p" | head -1; }
   if [ "$(v boot)" != 1 ]; then
@@ -169,8 +176,25 @@ else
             "from a PC once: adb shell pm grant moe.shizuku.privileged.api android.permission.WRITE_SECURE_SETTINGS"; fi
   [ "$(v shzidle)" -ge 1 ] 2>/dev/null || warn "the Shizuku app is under battery optimisation (rish then times out)" \
        "Settings > Apps > Shizuku > Battery > Unrestricted (the watchdog also requests it)"
-  [ -n "${SHIZUKU_AUTH:-}" ] || warn "SHIZUKU_AUTH not set: if Shizuku stops, the watchdog cannot start it" \
-       "Shizuku > Settings > View intents: copy the 'auth' value into ~/server/server.conf as SHIZUKU_AUTH=..."
+  V=$(v shzver)
+  case "$V" in
+    *thedjchi*) ok "Shizuku $V (thedjchi fork: waits for Wi-Fi at boot, retries, watchdog, START intent)"
+       [ -n "${SHIZUKU_AUTH:-}" ] || warn "SHIZUKU_AUTH not set: if Shizuku stops, the watchdog cannot start it" \
+            "Shizuku > Settings > View intents: copy the 'auth' value into ~/server/server.conf as SHIZUKU_AUTH=..." ;;
+    "") ;;
+    *) warn "official Shizuku $V: it tries to start only once at boot (Android 13+, no wait for Wi-Fi) and the server cannot restart it" \
+            "for unattended use install the thedjchi fork (same package name: uninstall this one first)"
+       [ -z "${SHIZUKU_AUTH:-}" ] || warn "SHIZUKU_AUTH has no effect with the official Shizuku" "remove it, or switch to the thedjchi fork" ;;
+  esac
+  case "$(v shzbg)" in
+    *ignore*|*deny*) warn "the Shizuku app may not run in the background" \
+                          "adb shell cmd appops set moe.shizuku.privileged.api RUN_ANY_IN_BACKGROUND allow (the watchdog also sets it)" ;;
+  esac
+  case "$(v adbtimeout)" in
+    0) ok "adb authorisation timeout disabled" ;;
+    *[0-9]*|null) warn "adb authorisations expire after days without reconnecting: Shizuku may fail to start after a reboot" \
+                       "Developer options > Disable adb authorization timeout (Shizuku with WRITE_SECURE_SETTINGS also turns it off when it starts)" ;;
+  esac
   case "$(v cred | tr A-Z a-z)" in
     pin|password|pattern|*pin*|*password*|*pattern*)
       warn "screen lock with $(v cred): after any reboot NOTHING starts until someone unlocks the phone (Android keeps app data locked)" \

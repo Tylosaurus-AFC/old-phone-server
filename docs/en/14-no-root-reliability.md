@@ -76,6 +76,10 @@ Read from the sources of the thedjchi fork (2026) and of `rish`, and from Androi
 * The fork's author has paused its maintenance (README, 2026): if a future Android breaks it, the official
   Shizuku still works but only starts by hand after each reboot.
 
+Variants and Android versions matter: Android 11–12 need a tap after every reboot, the official Shizuku
+tries to start only once at boot and has no START intent, and a user who stops Shizuku on purpose should
+`touch ~/server/no-shizuku-restart`. Full audit and recovery matrix: [16 · Shizuku audit](16-shizuku-audit.md).
+
 `shizuku.sh probe` tells the state from what `rish` prints; `/opt/bot/sys/shizuku` keeps it for the bot.
 Shortest fix for each:
 

@@ -2531,8 +2531,13 @@ def collect_problems():
         state, since, boot = shz.get("state", "ok"), int(shz.get("since") or 0), int(shz.get("boot") or 0)
         if state != "ok" and since and now - since >= 300 and now - boot >= 600:
             fix = SHZ_FIX.get(state, "abre la app Shizuku y arráncala")
-            if shz.get("auth") != "1" and state in ("not-running", "app-unreachable"):
-                fix += "; pon SHIZUKU_AUTH en server.conf para que se reinicie solo"
+            if shz.get("paused") == "1":
+                fix += " (el reinicio automático está en pausa: ~/server/no-shizuku-restart)"
+            elif state in ("not-running", "app-unreachable"):
+                if shz.get("variant") == "official":
+                    fix += " (la Shizuku oficial no la puede reiniciar el servidor; el fork de thedjchi sí)"
+                elif shz.get("auth") != "1":
+                    fix += "; pon SHIZUKU_AUTH en server.conf para que se reinicie solo"
             add("shizuku", "degraded", f"Shizuku no funciona ({state})",
                 "si Android cierra Termux no se reabre solo, y /reiniciar del móvil no va", fix)
 

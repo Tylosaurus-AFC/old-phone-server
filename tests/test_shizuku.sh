@@ -60,7 +60,8 @@ cat > "$D/sa.sh" <<EOF
 #!/bin/sh
 case "\$1" in
   "echo OK") [ -f "$T/shz_up" ] && echo OK ;;
-  *"# keepalive"*) echo x >> "$T/keep.log"; cat "$T/keep.out" 2>/dev/null ;;
+  *"# keepalive"*) echo x >> "$T/keep.log"; echo "\$1" >> "$T/keep.cmd"; cat "$T/keep.out" 2>/dev/null ;;
+  *versionName*) [ -f "$T/shz_up" ] && cat "$T/version" 2>/dev/null ;;
 esac
 EOF
 chmod +x "$D/sa.sh"
@@ -155,6 +156,31 @@ printf 'chk_sdk=34\nchk_idle=0\nchk_bg=RUN_ANY_IN_BACKGROUND: allow\nchk_phantom
 passes 180 "NET_HOSTS=$UP"
 check "keep-alive refused: retried less often (0, 30, 90 min: 3 times in 3 h)" 3 "$(cnt "$T/keep.log" x)"
 check "keep-alive refused: reported once, naming what failed" 1 "$(cnt "$OPT/events.jsonl" "Android no aceptó: exención de batería de Termux, límite de procesos de Android")"
+
+# Which Shizuku: detected while it works, remembered, and it decides whether START is tried
+fresh ok; touch "$T/shz_up"; echo "13.7.0-thedjchi" > "$T/version"
+passes 2 "NET_HOSTS=$UP" "SHIZUKU_AUTH=s3cret"
+check "variant detected while Shizuku works: fork + version" "fork 13.7.0-thedjchi" "$(st variant) $(st version)"
+rm -f "$T/shz_up"; echo not-running > "$T/rish_state"; echo $(( $(cat "$T/clock") - 86400 )) > "$D/boot_time"
+rm -f "$D/charge.pid"; passes 2 "NET_HOSTS=$UP" "SHIZUKU_AUTH=s3cret"
+check "variant remembered across a watchdog restart while Shizuku is down" fork "$(st variant)"
+check "fork: START is tried" 1 "$(cnt "$T/am.log" broadcast)"
+
+fresh ok; touch "$T/shz_up"; echo "13.6.0.r1086.2650830" > "$T/version"
+passes 2 "NET_HOSTS=$UP" "SHIZUKU_AUTH=s3cret"
+rm -f "$T/shz_up" "$T/am.log"; echo not-running > "$T/rish_state"
+passes 10 "NET_HOSTS=$UP" "SHIZUKU_AUTH=s3cret"
+check "official Shizuku: never sends START (it has no such receiver)" "official 0" "$(st variant) $(cnt "$T/am.log" broadcast)"
+
+fresh not-running; rm -f "$OPT/sys/shizuku"; touch "$D/no-shizuku-restart"
+passes 10 "NET_HOSTS=$UP" "SHIZUKU_AUTH=s3cret"
+check "~/server/no-shizuku-restart: Shizuku stopped on purpose is left alone" "0 1" "$(cnt "$T/am.log" broadcast) $(st paused)"
+rm -f "$D/no-shizuku-restart"
+
+fresh ok; touch "$T/shz_up"; rm -f "$T/keep.cmd"
+printf 'chk_sdk=34\nchk_idle=1\nchk_bg=RUN_ANY_IN_BACKGROUND: allow\nchk_phantom=false\nchk_maxph=null\n' > "$T/keep.out"
+passes 1 "NET_HOSTS=$UP"
+check "keep-alive also lets the Shizuku app run in the background (its wiki's advice)" 1 "$(cnt "$T/keep.cmd" 'cmd appops set moe.shizuku.privileged.api $o allow')"
 
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

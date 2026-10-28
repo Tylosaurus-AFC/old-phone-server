@@ -119,6 +119,7 @@ English: [docs/en](docs/en/) · Español: [docs/es](docs/es/)
 | [11 FAQ y seguridad](docs/es/11-faq-y-seguridad.md) | legal, seguridad, créditos |
 | [12 Modo sin root](docs/es/12-modo-sin-root.md) | Termux + proot + Shizuku, paso a paso, con supervisión probada |
 | [14 Sin root 24/7](docs/es/14-sin-root-fiabilidad.md) | qué puede parar un servidor sin root, las defensas, `doctor.sh`, recuperación de Shizuku, avisos automáticos, perfiles por fabricante, matriz de compatibilidad |
+| [16 Auditoría de Shizuku](docs/es/16-shizuku-auditoria.md) | Shizuku oficial frente al fork de thedjchi, qué se recupera solo, por versión de Android |
 | [15 Evaluación de WhatsApp](docs/es/15-whatsapp-evaluacion.md) | ¿puede WhatsApp ser un segundo canal? opciones, costes, riesgos, recomendación (sin implementar) |
 | [13 Recetas multimedia](docs/es/13-recetas-multimedia.md) | disco USB, WebDAV, DLNA, Jellyfin, espejo de YouTube, trampas de hubs |
 

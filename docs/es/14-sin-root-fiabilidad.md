@@ -77,6 +77,11 @@ Leído del código del fork de thedjchi (2026) y de `rish`, y de la documentaci�
 * El autor del fork ha pausado su mantenimiento (README, 2026): si un Android futuro lo rompe, el Shizuku
   oficial sigue funcionando pero solo arranca a mano tras cada reinicio.
 
+La variante y la versión de Android importan: Android 11–12 piden un toque tras cada reinicio, la Shizuku
+oficial solo intenta arrancar una vez al encender y no tiene aviso START, y quien pare Shizuku a propósito
+debe hacer `touch ~/server/no-shizuku-restart`. Auditoría completa y matriz de recuperación:
+[16 · Auditoría de Shizuku](16-shizuku-auditoria.md).
+
 `shizuku.sh probe` deduce el estado de lo que imprime `rish`; `/opt/bot/sys/shizuku` lo guarda para el bot.
 Arreglo más corto de cada uno:
 

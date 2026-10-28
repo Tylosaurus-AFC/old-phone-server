@@ -488,6 +488,18 @@ class ProblemCollection(unittest.TestCase):
         self.assertIn("Iniciar", p["fix"])
         self.assertIn("SHIZUKU_AUTH", p["fix"])
 
+    def test_official_shizuku_down_does_not_suggest_shizuku_auth(self):
+        now = int(bot.time.time())
+        self.shizuku(state="not-running", since=now - 900, auth=0, variant="official")
+        p = self.ids()["shizuku"]
+        self.assertNotIn("SHIZUKU_AUTH", p["fix"])
+        self.assertIn("oficial", p["fix"])
+
+    def test_shizuku_restart_paused_on_purpose_says_so(self):
+        now = int(bot.time.time())
+        self.shizuku(state="not-running", since=now - 900, auth=1, paused=1)
+        self.assertIn("pausa", self.ids()["shizuku"]["fix"])
+
     def test_shizuku_just_after_boot_is_not_a_problem(self):
         now = int(bot.time.time())
         self.shizuku(state="not-running", since=now - 400, boot=now - 400)
