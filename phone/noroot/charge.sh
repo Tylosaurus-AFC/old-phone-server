@@ -176,7 +176,7 @@ shizuku_check() {
     && mv $SYS/shizuku.tmp $SYS/shizuku
 }
 
-NETFAIL=0 NETDOWN=0 HUNG_UNTIL=0 WAS="" ADBWAS="" KEEP_AT=0 KEEP_FAIL=0 HAVE=1
+NETFAIL=0 NETDOWN=0 NETWAIT=5 NETOFF=0 HUNG_UNTIL=0 WAS="" ADBWAS="" KEEP_AT=0 KEEP_FAIL=0 HAVE=1
 SHZ_STATE=unknown SHZ_DETAIL="" SHZ_SINCE=0 SHZ_TRIES=0 SHZ_TRY_AT=0 SHZ_CHECK_AT=0
 SHZ_VARIANT=$(sed -n 's/^variant=//p' $SYS/shizuku 2>/dev/null)     # known from a previous run
 SHZ_VERSION=$(sed -n 's/^version=//p' $SYS/shizuku 2>/dev/null)
@@ -366,15 +366,18 @@ while true; do
 
   botdown_check
 
-  # --- Network: 5 minutes without Internet -> cycle Wi-Fi --------------------------------------
+  # --- Network: no Internet -> cycle Wi-Fi after 5 min, then after 10, 20, 40, 60, 60... ----
+  # The first cycle fixes a stuck Wi-Fi; in a long router/ISP outage cycling every 5 min
+  # helps nothing and floods /historial (a 24 h outage used to mean 288 cycles).
   if online; then
-    NETFAIL=0
+    NETFAIL=0 NETWAIT=5 NETOFF=0
     if [ $NETDOWN -gt 0 ]; then ev wifi "Internet volvió tras reiniciar el Wi-Fi"; NETDOWN=0; fi
   else
-    NETFAIL=$((NETFAIL + 1))
-    if [ $NETFAIL -ge 5 ]; then
-      log red "no Internet for 5 min, cycling Wi-Fi"
-      ev wifi "5 min sin Internet: reinicio el Wi-Fi"
+    NETFAIL=$((NETFAIL + 1)) NETOFF=$((NETOFF + 1))
+    if [ $NETFAIL -ge $NETWAIT ]; then
+      NETWAIT=$((NETWAIT * 2)); [ $NETWAIT -gt 60 ] && NETWAIT=60
+      log red "no Internet for $NETOFF min, cycling Wi-Fi (next try in $NETWAIT min)"
+      ev wifi "$NETOFF min sin Internet: reinicio el Wi-Fi (siguiente intento en $NETWAIT min)"
       if [ $HAVE = 0 ]; then detached 'svc wifi disable; sleep 5; svc wifi enable'
       else termux-wifi-enable false; sleep 5; termux-wifi-enable true; fi
       NETFAIL=0; NETDOWN=1

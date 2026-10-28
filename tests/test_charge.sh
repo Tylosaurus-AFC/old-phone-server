@@ -77,5 +77,19 @@ touch "$T/d/BOT_ENABLED"; run
 [ -f "$T/bot-started" ] && r=started || r=not-started
 check "gate: BOT_ENABLED present -> bot.sh started" started "$r"
 
+# Long Internet outage (6 simulated hours: fake date/sleep move a clock): Wi-Fi restarted
+# after 5 min, then 10, 20, 40, 60 min apart -- not every 5 min (that was 72 restarts)
+setup none 0 50 300 Charging
+S="$T/shims"; mkdir -p "$S"; echo 1800000000 > "$T/clock"
+printf '#!/bin/sh\ncase "$1" in +%%s) cat "%s/clock" ;; *) exec /bin/date "$@" ;; esac\n' "$T" > "$S/date"
+printf '#!/bin/sh\nn=${1%%%%.*}; echo $(( $(cat "%s/clock") + ${n:-0} )) > "%s/clock"\n' "$T" "$T" > "$S/sleep"
+printf '#!/bin/sh\nexit 1\n' > "$S/ping"
+printf '#!/bin/sh\necho "$*" >> "%s/svc.log"\n' "$T" > "$S/svc"
+chmod +x "$S"/*
+DEBIAN="$T/d" BB="$T/bbshim" PATH="$S:$PATH" ONCE=360 sh "$HERE/phone/charge.sh" >/dev/null 2>&1
+n=$(grep -c 'reinicio el Wi-Fi' "$T/d/fs/opt/bot/events.jsonl" 2>/dev/null || true)
+check "6 h without Internet: Wi-Fi restarts back off (8, not 72)" yes "$([ "${n:-0}" -ge 5 ] && [ "${n:-0}" -le 10 ] && echo yes || echo "no ($n)")"
+check "6 h without Internet: each restart says how long it has been" yes "$(grep -q '135 min sin Internet' "$T/d/fs/opt/bot/events.jsonl" && echo yes || echo no)"
+
 echo "---- $PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]

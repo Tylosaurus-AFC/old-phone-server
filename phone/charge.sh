@@ -12,7 +12,7 @@
 #  - battery: keeps the charge between LOW and HIGH (see server.conf: BATT_CTRL)
 #
 # Settings: $DEBIAN/server.conf (re-read every minute).
-# Test hooks (see tests/): ONCE=1 runs a single pass; DEBIAN and BB can be overridden.
+# Test hooks (see tests/): ONCE=N runs N passes (1 = a single pass); DEBIAN and BB can be overridden.
 DEBIAN=${DEBIAN:-/data/debian}
 BB=${BB:-/system/xbin/busybox-deb}; [ -x "$BB" ] || BB=$DEBIAN/busybox-deb
 
@@ -45,7 +45,7 @@ log() { echo "$(date) [carga] $*" >> $LOG; }
 # Event for the bot's /historial (same format as health.py; no quotes inside the text)
 ev() { echo "{\"t\":$($BB date +%s),\"k\":\"$1\",\"x\":\"$2\"}" >> $EV; }
 
-NETFAIL=0
+NETFAIL=0; NETWAIT=5; NETOFF=0
 NETDOWN=0
 HUNG_UNTIL=0
 BADLINK=0
@@ -182,13 +182,13 @@ while true; do
 
   # Network watchdog: 5 minutes without Internet -> restart Wi-Fi
   if ping -c1 -W5 1.1.1.1 >/dev/null 2>&1 || ping -c1 -W5 8.8.8.8 >/dev/null 2>&1; then
-    NETFAIL=0; OFFLINE=0
+    NETFAIL=0; OFFLINE=0; NETWAIT=5; NETOFF=0
     if [ $NETDOWN -gt 0 ]; then
       ev wifi "Internet volvió tras reiniciar el Wi-Fi"
       NETDOWN=0
     fi
   else
-    NETFAIL=$((NETFAIL + 1)); OFFLINE=$((OFFLINE + 1))
+    NETFAIL=$((NETFAIL + 1)); OFFLINE=$((OFFLINE + 1)); NETOFF=$((${NETOFF:-0} + 1))
     # Optional (phone/extras/wifi-band.sh): pinned to 5 GHz and 10 min offline -> allow 2.4 GHz again
     if [ $OFFLINE -ge 10 ] && [ -z "$ETH" ] && [ -f $DEBIAN/wifi-band.sh ] \
        && $BB grep -q '<boolean name="AutoJoinEnabled" value="false" />' \
@@ -196,9 +196,11 @@ while true; do
       ev wifi "10 min sin Internet en 5 GHz: vuelvo a permitir el Wi-Fi de 2,4 GHz"
       /system/bin/sh $DEBIAN/wifi-band.sh 2g
       OFFLINE=0; NETFAIL=0; NETDOWN=1
-    elif [ $NETFAIL -ge 5 ]; then
-      echo "$(date) [red] no Internet for 5 min, restarting Wi-Fi" >> $LOG
-      ev wifi "5 min sin Internet: reinicio el Wi-Fi"
+    elif [ $NETFAIL -ge ${NETWAIT:-5} ]; then
+      # after 5 min, then 10, 20, 40, 60, 60... (a long outage is not fixed by cycling Wi-Fi)
+      NETWAIT=$((${NETWAIT:-5} * 2)); [ $NETWAIT -gt 60 ] && NETWAIT=60
+      echo "$(date) [red] no Internet for $NETOFF min, restarting Wi-Fi (next try in $NETWAIT min)" >> $LOG
+      ev wifi "$NETOFF min sin Internet: reinicio el Wi-Fi (siguiente intento en $NETWAIT min)"
       svc wifi disable; sleep 5; svc wifi enable
       NETFAIL=0; NETDOWN=1
     fi
@@ -242,6 +244,6 @@ while true; do
     echo "—" > $BOTDIR/charge_range
     echo 0 > $BOTDIR/charge_paused
   fi
-  [ -n "$ONCE" ] && break
+  if [ -n "$ONCE" ]; then ONCE=$((ONCE - 1)); [ $ONCE -le 0 ] && break; fi   # ONCE=N: N passes
   sleep 60
 done

@@ -19,6 +19,7 @@ echo "== no-root charge.sh with a fake Shizuku =="; bash tests/test_noroot.sh
 echo "== no-root doctor.sh in a fake Termux =="; bash tests/test_doctor.sh
 echo "== Shizuku recovery over simulated hours =="; bash tests/test_shizuku.sh
 echo "== watchdog Telegram message when the bot is dead =="; bash tests/test_botdown.sh
+echo "== long simulated runs with scheduled/random faults (LONG=1 for 12-72 h) =="; bash tests/test_longrun.sh
 echo "== bot.sh back-off and start.sh boot sequence =="; bash tests/test_services.sh
 echo "== state-change alerts (fake clock and Telegram) =="; "${PYTHON:-python3}" tests/test_alerts.py
 echo "== bot, plugins, helpers =="; "${PYTHON:-python3}" tests/test_bot.py

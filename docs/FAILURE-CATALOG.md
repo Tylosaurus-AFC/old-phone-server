@@ -1,7 +1,7 @@
 # Failure catalog → automated tests
 
 Each scenario the project tries to survive, the test that covers it, what that test fakes, and what
-only a real phone can confirm. All tests run with `tests/run.sh` (no phone, no network, ~90 s).
+only a real phone can confirm. All tests run with `tests/run.sh` (no phone, no network, ~4 min); `LONG=1 bash tests/test_longrun.sh` adds 12/24/48/72 h simulations (~30 min). Simulated hours test the logic, not a phone.
 "Caught" = the test was run against the previous code or a deliberately broken copy and failed.
 
 | Scenario | Test | What is faked | Caught | Needs a real phone for |
@@ -31,6 +31,10 @@ only a real phone can confirm. All tests run with `tests/run.sh` (no phone, no n
 | Secrets in diagnostics, alerts, events | `test_bot.py` Diagnostics, `test_alerts.py`, `test_shizuku.sh`, `test_botdown.sh` | content | — | review a real `/diagnostico` |
 | Token on a process command line | `test_botdown.sh` | curl | yes (mutation) | — |
 | Owner-only admin commands and buttons | `test_bot.py` Dispatch, Buttons | Telegram | yes (buttons) | — |
+| Long Internet outage: Wi-Fi restarted every 5 min forever (288/day) | `test_longrun.sh` A, `test_charge.sh` (root) | network (TCP listener driven by a schedule), clock | yes (old code: 58 in 5 h; root 72 in 6 h) | — |
+| Chained failures: Shizuku down + no Internet + Telegram down + bot dead + Termux:API empty, overlapping | `test_longrun.sh` B | schedule-driven shims | yes (arithmetic abort reintroduced: run stops at 1 h) | real interplay of Android services |
+| Random faults over 4 h (72 h with `LONG=1`), reproducible seed | `test_longrun.sh` C | schedule-driven shims | partly (event storm of the old Wi-Fi logic) | — |
+| Official Shizuku vs fork, deliberate stop | `test_shizuku.sh`, `test_doctor.sh` | `dumpsys` versionName | yes (2 mutations) | real versionName strings |
 | Long screen-off running, wake-lock cost, real reboots, power cuts | — | — | — | **docs/*/14-***, long tests |
 
 Simulators do not reproduce Android's scheduling, Doze, the phantom-process killer, OEM killers,
