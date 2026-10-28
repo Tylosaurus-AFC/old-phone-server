@@ -99,3 +99,22 @@ de Shizuku y su rearranque con el aviso START del fork (`502cc50`), el mensaje d
 está muerto (`2ea9b02`) y su documentación, la evaluación de WhatsApp y el catálogo de fallos (`7827800`).
 La CI no pasó nunca antes de `d7a3e64` (una f-string de Python 3.12+ que ya estaba en main); los informes
 anteriores no lo detectaron.
+
+## Sexta tanda (28-10-2026): integración, auditoría de Shizuku, simulaciones largas, códigos de salida
+
+**Correcciones a informes anteriores.** (1) La CI añadida en la primera tanda nunca pasó: una f-string de
+Python 3.12+ que ya estaba en main rompía las pruebas del bot en el Python 3.11 de la CI; nadie miró las
+ejecuciones. Corregido (`d7a3e64`); la CI usa 3.11 y 3.13 y está en verde. (2) «La Shizuku oficial solo
+arranca al encender con root» estaba desfasado: la v13.6.0 arranca por depuración inalámbrica en Android 13+
+(un intento). (3) La matriz daba como «esperado» el arranque desatendido de Shizuku en Android 11–12: falso,
+esas versiones olvidan las redes permitidas en cada reinicio (corregido en Android 13). (4) Las comprobaciones
+del bot del primer arnés de simulación larga no probaban nada hasta crear allí `BOT_ENABLED`.
+
+| # | Gravedad | Hallazgo (todos reproducidos antes de corregir) | Estado |
+|---|---|---|---|
+| 28 | Alta | Los vigilantes (ambos modos) reiniciaban el Wi-Fi cada 5 min durante todo un corte: 288 reinicios/eventos al día | Corregido: 5, 10, 20, 40 y luego 60 min |
+| 29 | Alta | El mensaje de «bot muerto» saltaba en cada reinicio (señal de vida vieja en disco) | Corregido |
+| 30 | Alta | `noroot-restore.sh` decía «Done» tras fallar la extracción; `restore-config.sh` contaba copias fallidas; respaldos sin token se anunciaban como buenos | Corregido, salida 1 con explicación |
+| 31 | Media | `/diagnostico` y `/salud` fallaban con archivos raros | Corregido |
+| 32 | Media | El servidor mandaría START a la Shizuku oficial y pelearía con un usuario que la para a propósito | Corregido: detección de variante, `~/server/no-shizuku-restart` |
+| 33 | Baja | Las pruebas dejaban procesos `sleep` huérfanos | Corregido |
