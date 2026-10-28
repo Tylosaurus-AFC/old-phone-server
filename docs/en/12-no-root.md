@@ -114,6 +114,13 @@ Set `NOROOT_SSH=phone`, `NOROOT_IP=…` in `config.sh`. In `$PREFIX/etc/ssh/sshd
    tools/noroot-install.sh rish path/to/folder      # prints "test: uid=2000(shell)…" when it works
    ```
    (Android 14+ requires the `.dex` to be read-only and inside the app's own directory: the script does it.)
+5. So that Shizuku can come back **by itself** (details and limits in [14](14-no-root-reliability.md#shizuku-what-can-and-cannot-be-recovered)):
+   * from the PC, once: `adb shell pm grant moe.shizuku.privileged.api android.permission.WRITE_SECURE_SETTINGS`
+     (the fork needs it to switch wireless debugging on at boot);
+   * Settings → Apps → **Shizuku** → Battery → **Unrestricted** (when it is frozen, `rish` times out);
+   * in Shizuku's settings turn on its **watchdog**, and copy the `auth` value shown under **View intents**
+     into `~/server/server.conf` as `SHIZUKU_AUTH=…`: then the server's watchdog can ask Shizuku to start;
+   * when Android asks whether to allow wireless debugging on your Wi-Fi, choose **Always allow on this network**.
 
 Without Shizuku the watchdog still runs: it falls back to Termux:API for the battery and Wi-Fi, and
 the bot's `/reiniciar confirmar` tells you it cannot reboot the phone.

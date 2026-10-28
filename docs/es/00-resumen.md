@@ -120,5 +120,6 @@ respaldos y restauración, y un procedimiento documentado para cada fallo que no
 | 10 | [Móviles probados](10-moviles-probados.md) | medidas y manías de cuatro equipos reales |
 | 11 | [FAQ y seguridad](11-faq-y-seguridad.md) | legal, seguridad, riesgos, preguntas frecuentes |
 | 12 | [Modo sin root](12-modo-sin-root.md) | el mismo servidor con Termux + proot + Shizuku, sin root |
-| 14 | [Sin root 24/7](14-sin-root-fiabilidad.md) | límites del modo sin root, defensas, `doctor.sh`, matriz de compatibilidad |
+| 14 | [Sin root 24/7](14-sin-root-fiabilidad.md) | límites del modo sin root, defensas, `doctor.sh`, recuperación de Shizuku, avisos, matriz de compatibilidad |
+| 15 | [Evaluación de WhatsApp](15-whatsapp-evaluacion.md) | un segundo canal: opciones, costes, riesgos (sin implementar) |
 | 13 | [Recetas multimedia](13-recetas-multimedia.md) | NAS / DLNA / Jellyfin / espejo de YouTube opcionales en un disco USB |

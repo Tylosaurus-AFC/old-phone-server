@@ -1,0 +1,39 @@
+# Failure catalog → automated tests
+
+Each scenario the project tries to survive, the test that covers it, what that test fakes, and what
+only a real phone can confirm. All tests run with `tests/run.sh` (no phone, no network, ~90 s).
+"Caught" = the test was run against the previous code or a deliberately broken copy and failed.
+
+| Scenario | Test | What is faked | Caught | Needs a real phone for |
+|---|---|---|---|---|
+| Watchdog pass with Shizuku down and Termux:API empty | `test_noroot.sh` "no Shizuku, empty Termux:API" | Shizuku, Termux:API | yes (old code aborted the pass) | Termux:API timing |
+| Corrupt heartbeat file | `test_noroot.sh` "corrupt heartbeat" | file content | yes | — |
+| Termux reopened many times (duplicate watchdog loops) | `test_noroot.sh` boot.sh | sshd, charge.sh | yes (3 loops) | real Termux reopen |
+| Keep-alive settings applied / refused by Android | `test_noroot.sh`, `test_shizuku.sh` | `sa.sh` answers | yes (mutations) | that Android really keeps them |
+| Shizuku stopped / app frozen / not authorised / dialog / writable dex / missing | `test_shizuku.sh` probe | `rish` output (texts from Shizuku's sources) | — | real `rish` behaviour per Android version |
+| Shizuku restart: backoff, boot grace, offline, no auth | `test_shizuku.sh` charge.sh | clock, `am`, network (local TCP listener) | yes (3 mutations) | that the fork starts on the broadcast |
+| Shizuku checks thinned out while down | `test_shizuku.sh` | clock | yes | battery cost |
+| Termux:Boot never opened / force-stopped / missing | `test_doctor.sh` | `dumpsys` output | — | real `dumpsys package` format |
+| Battery optimisation, background, standby bucket, phantom killer, wake lock | `test_doctor.sh` | `dumpsys`/`settings` output | — | real formats, OEM differences |
+| PIN lock (no start before unlock) | `test_doctor.sh` | `dumpsys lock_settings` format (unverified) | — | **everything**: format and behaviour |
+| Out of space | `test_doctor.sh`, `test_bot.py` ProblemCollection, `test_bot.py` SafeUpdate | `df`, `disk_usage` | yes (update skipped) | real low-space behaviour |
+| Config missing / invalid (`config.sh`, `server.conf`) | `test_tools.sh`, `test_doctor.sh` | adb/ssh | yes (11 failures on old tools) | Windows Git Bash paths |
+| Phone unreachable (adb, SSH) | `test_tools.sh` | adb/ssh | — | — |
+| Android too old / low space before installing | `test_tools.sh` preflight (executed) | getprop, df | — | — |
+| Backup/restore loses files | `test_backup_lists.sh`, `test_tools.sh` | adb/ssh | yes | restore on a spare phone |
+| Downloader update fails / tools broken afterwards | `test_bot.py` SafeUpdate | pip | yes | real pip on ARM |
+| Internet / DNS down | `test_bot.py` ProblemCollection, alerts end-to-end | `internet_ok` | — | real outage |
+| Bot dead or crash-looping (cannot report itself) | `test_botdown.sh` | clock, curl, network | yes (3 mutations) | curl/TLS in Termux |
+| Telegram down, slow or failing during an incident | `test_alerts.py`, `test_botdown.sh` | `send()` / curl | yes | real Bot API errors |
+| Alert storms, flapping, ok→degraded→broken→degraded→ok | `test_alerts.py` | clock | yes (no transient filter) | — |
+| Restart during an incident, corrupt alert state | `test_alerts.py` | file | yes (state not saved) | — |
+| Concurrent evaluations (duplicate alerts) | `test_alerts.py` | threads | — | — |
+| Secrets in diagnostics, alerts, events | `test_bot.py` Diagnostics, `test_alerts.py`, `test_shizuku.sh`, `test_botdown.sh` | content | — | review a real `/diagnostico` |
+| Token on a process command line | `test_botdown.sh` | curl | yes (mutation) | — |
+| Owner-only admin commands and buttons | `test_bot.py` Dispatch, Buttons | Telegram | yes (buttons) | — |
+| Long screen-off running, wake-lock cost, real reboots, power cuts | — | — | — | **docs/*/14-***, long tests |
+
+Simulators do not reproduce Android's scheduling, Doze, the phantom-process killer, OEM killers,
+timing of Shizuku/Termux at boot, or radio behaviour. Formats of `dumpsys` output were written from
+Android/Termux sources and documentation; an unexpected format produces a WARN or a missing line,
+never a crash (tested by feeding unknown values).

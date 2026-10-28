@@ -50,6 +50,70 @@ phantom-process killer, the Termux wake lock and wireless debugging.
 | **Storage full** | doctor (< 1 GB warn, < 300 MB fail); bot's `/salud` | bot skips updates below 300 MB free; temp downloads deleted at start | partly | free space |
 | **Out of memory** (Android kills the biggest process) | `bot.sh` (crash event), heartbeat | — | yes: `bot.sh` restarts with back-off; watchdog relaunches `bot.sh` | if it repeats, fewer parallel downloads / plugins |
 | **Bot frozen** | heartbeat older than 5 min | — | yes: killed and restarted | — |
+| **Bot dead or crash-looping** (cannot report itself) | watchdog: heartbeat older than 15 min | — | relaunched by `bot.sh`/watchdog; **the watchdog sends you one Telegram message itself** (curl), retried every 10 min until confirmed | look if it does not come back |
+| **Screen lock with PIN/password/pattern, then a reboot** (power cut, update) | doctor (lock type, when Android reports it) | use Swipe/None on a dedicated server phone | **no**: until the first unlock Android keeps app data encrypted and does not deliver the boot event; neither Termux nor Shizuku can start | unlock the phone after each reboot, or remove the secure lock |
+| **Watchdog itself stopped** | the bot: Shizuku state file not updated for 15 min → alert | the boot loop relaunches `charge.sh` every minute | yes, unless Termux is gone (then guard.sh) | — |
+
+## Shizuku: what can and cannot be recovered
+
+Read from the sources of the thedjchi fork (2026) and of `rish`, and from Android's documentation:
+
+* Shizuku's service is a process started through adb as the `shell` user: **it dies on every reboot**.
+  With *start on boot* the fork queues a job that waits for Wi-Fi, switches `adb_enabled` and
+  `adb_wifi_enabled` on itself (it needs `WRITE_SECURE_SETTINGS`, granted once from a PC), sets
+  "adb authorisation timeout" off, finds the wireless-debugging **port by mDNS** and starts the service.
+  No fixed IP or port is involved, so DHCP changes and the changing port do not matter.
+* If the Wi-Fi network is **not yet authorised** for wireless debugging, Android switches it back off.
+  When the phone is locked the fork waits for the next unlock; otherwise it retries later. Fix once: *Always
+  allow on this network*.
+* The fork has a **watchdog** (opt-in) that restarts the service if it crashes, and an exported
+  `START` receiver protected by a secret (`auth`). With `SHIZUKU_AUTH` in `server.conf` the server's watchdog
+  sends that broadcast (`shizuku.sh start`) when Shizuku is stopped: 2, 5, 10, 30 min apart then every
+  30 min, never in the first 5 min after boot, never offline, and never for problems only the user can fix.
+* What the server **cannot** do: re-enable wireless debugging or Shizuku without Shizuku (Termux has no
+  permission to change those settings); authorise Termux in Shizuku; get past a PIN after a reboot. Then it
+  detects, explains and alerts.
+* The fork's author has paused its maintenance (README, 2026): if a future Android breaks it, the official
+  Shizuku still works but only starts by hand after each reboot.
+
+`shizuku.sh probe` tells the state from what `rish` prints; `/opt/bot/sys/shizuku` keeps it for the bot.
+Shortest fix for each:
+
+| State | Meaning | Shortest fix |
+|---|---|---|
+| `not-running` | app alive, service stopped | automatic with `SHIZUKU_AUTH`; else open Shizuku → Start (Wi-Fi on) |
+| `app-unreachable` | the Shizuku app does not answer (frozen, force-stopped) | open Shizuku once; Battery → Unrestricted (the START broadcast also tries to wake it) |
+| `not-authorized` | Termux not allowed | Shizuku → Authorized applications → Termux on |
+| `awaiting-permission` | a permission dialog is waiting on screen | unlock, tap Allow |
+| `dex-writable` | Android 14+ refuses a writable dex | `chmod 400 ~/server/rish_shizuku.dex` |
+| `no-rish` | not set up | `tools/noroot-install.sh rish <folder>` |
+
+While Shizuku is down the watchdog checks it every minute for 10 min, then every 5 min (each failed check
+costs ~40 s of `rish` time-outs, which used to delay the rest of every pass).
+
+## Automatic alerts (Telegram)
+
+The bot evaluates the real state every 5 min and messages the owner **only when it changes**
+(`bot/alerts.py`):
+
+* **broken** — the server cannot do its main job: no Internet (TCP + DNS checked), < 300 MB free,
+  yt-dlp/gallery-dl do not start (actually run, every 30 min), the no-root watchdog has stopped, a `FAIL`
+  of `doctor.sh`. **degraded** — it works with limits: < 1 GB free, Shizuku down > 5 min (outside boot),
+  ≥ 3 bot restarts in 6 h, ≥ 5 failed downloads in 1 h, a `WARN` of `doctor.sh`. **ok** — none confirmed.
+* A problem counts after 2 checks and 5 min (broken) / 10 min (degraded): one-minute blips are ignored.
+  Everything new in a check goes in **one** message with the impact and what to do; level changes and
+  recoveries (after 5 min absent) are announced once; broken problems are reminded every 12 h.
+* A message counts as delivered only when Telegram returns its id. If Telegram (or Internet) is down,
+  retries back off (1, 2, 5, 10, 30 min) and no stale queue builds up: the next message tells the current
+  state, how late it is and what happened and was solved meanwhile. `/salud` shows the channel state.
+* The state is saved on disk, so a restart repeats nothing. Texts pass through the same filter as
+  `/diagnostico` (no tokens, IDs, IPs).
+* When the **bot itself** is dead, the no-root watchdog sends one message by curl (see the table above;
+  `BOTDOWN_ALERT=0` turns it off).
+
+What if Telegram is the thing failing? The server keeps working and keeps a record (`/historial`); it never
+claims a message was delivered without Telegram's confirmation; once Telegram answers, one catch-up
+message arrives. A second channel for that case is evaluated in [15](15-whatsapp-evaluation.md).
 
 ### proot compared with root's chroot
 
@@ -98,7 +162,10 @@ not guaranteed.
 | Start after reboot (Termux:Boot) | D | D | D | D | **V** |
 | Shizuku starts by itself at boot | N (manual start each boot) | D | D | D | **V** |
 | guard.sh reopens a closed Termux | N without Shizuku | D | D | D | **V** |
-| Keep-alive settings re-applied | N without Shizuku | S | S | S | S (new; physical test pending) |
+| Keep-alive settings re-applied, read back | N without Shizuku | S | S | S | S (new; physical test pending) |
+| Shizuku state detection, restart via START intent | N (Android < 11: no wireless debugging) | S | S | S | S (physical test pending) |
+| State-change alerts / bot-down message | S | S | S | S | S (physical test pending) |
+| Starts after a reboot with a PIN lock, before unlock | N | N | N | N | N |
 | Phantom killer handled | not needed | not needed | S (limit re-applied) | S (setting) | S |
 | `doctor.sh` / `/salud` line | S | S | S | S | S (physical run pending) |
 | Single watchdog loop when Termux reopens | S | S | S | S | S |
@@ -122,6 +189,10 @@ versions, `doctor.sh` output before and after, start/end time, and the bot's `/h
 | Network | router off 10 min | "sin conexión de … a …" reported; downloads resume |
 | Storage | fill the phone to < 300 MB free | doctor FAIL; bot skips updates; no crash loop |
 | Memory | open heavy apps while downloading | bot restarted by `bot.sh` if killed; no lost settings |
+| Shizuku restart | in Shizuku, Stop; wait ≤ 3 min with `SHIZUKU_AUTH` set | `/historial` shows the start request and "Shizuku disponible" |
+| Shizuku after reboot, new network | reboot on a Wi-Fi not yet authorised for wireless debugging, screen locked | doctor/alert says Shizuku down; after unlocking and "Always allow", it starts |
+| Alerts | stop the router 20 min | one "falla algo importante" message after Internet returns ("Aviso con retraso"), then one "Resuelto" |
+| Bot dead | make it unable to start for 20 min: rename `/opt/bot/bot.py` to `bot.py.off` (a frozen bot does not count: it is restarted after 5 min) | one message from the watchdog; rename back, the bot reports the restarts |
 | Power cut | unplug for an hour with the bot running | the power cut appears in `/historial` and `/bateria`; everything keeps running on battery |
 
 ## Turning the automatic settings off

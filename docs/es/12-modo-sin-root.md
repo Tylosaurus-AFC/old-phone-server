@@ -115,6 +115,13 @@ Pon `NOROOT_SSH=phone`, `NOROOT_IP=…` en `config.sh`. En `$PREFIX/etc/ssh/sshd
    tools/noroot-install.sh rish ruta/a/la/carpeta    # imprime «test: uid=2000(shell)…» cuando funciona
    ```
    (Android 14+ exige que el `.dex` sea de solo lectura y esté en el directorio propio de la app: el script lo hace.)
+5. Para que Shizuku vuelva **solo** (detalles y límites en [14](14-sin-root-fiabilidad.md#shizuku-qué-se-puede-recuperar-y-qué-no)):
+   * desde el PC, una vez: `adb shell pm grant moe.shizuku.privileged.api android.permission.WRITE_SECURE_SETTINGS`
+     (el fork lo necesita para encender la depuración inalámbrica al arrancar);
+   * Ajustes → Apps → **Shizuku** → Batería → **Sin restricciones** (si está congelada, `rish` no responde);
+   * en los ajustes de Shizuku activa su **watchdog** y copia el valor `auth` que aparece en **View intents**
+     en `~/server/server.conf` como `SHIZUKU_AUTH=…`: así el vigilante del servidor puede pedirle que arranque;
+   * cuando Android pregunte si permitir la depuración inalámbrica en tu Wi-Fi, elige **Permitir siempre en esta red**.
 
 Sin Shizuku el vigilante sigue funcionando: recurre a Termux:API para la batería y el Wi-Fi, y el
 `/reiniciar confirmar` del bot avisa de que no puede reiniciar el móvil.

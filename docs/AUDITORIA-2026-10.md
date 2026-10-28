@@ -43,6 +43,16 @@ Análisis completo, perfiles por fabricante y matriz: [`docs/es/14-sin-root-fiab
 Lo que `doctor.sh` lee de Android (`dumpsys`, `am`, etiqueta del wake lock) sale de la documentación y
 del código de Android/Termux, **no de un móvil**: un formato distinto saldría como aviso, nunca como fallo del script.
 
+| 21 | **Crítica** | El `charge.sh` sin root abortaba cada vuelta con Shizuku caído y Termux:API sin respuesta (aritmética sobre un voltaje vacío): ni relanzaba el bot ni recuperaba el Wi-Fi, justo en el caso degradado. | Corregido, con pruebas que fallan en el código anterior |
+| 22 | Alta | Shizuku caído solo se veía como «no responde»: sin causa, sin rearranque y con ~40 s de esperas en cada vuelta. | Corregido: `shizuku.sh`, aviso START con `SHIZUKU_AUTH` y esperas crecientes |
+| 23 | Alta | Sin avisos proactivos; los avisos sueltos no confirmaban la entrega. | Corregido: `bot/alerts.py` |
+| 24 | Alta | Nadie avisa de un bot muerto. | Corregido: mensaje del vigilante con curl |
+| 25 | Alta | Con PIN/contraseña nada arranca tras un reinicio hasta desbloquear. | Documentado; doctor lo detecta si Android informa del tipo de bloqueo |
+| 26 | Media | Ajustes anti-cierre aplicados a ciegas. | Corregido: se comprueban, aviso único y esperas |
+| 27 | Media | El puente de WhatsApp de referencia escucha en todas las interfaces sin autenticación. | Anotado en la evaluación ([15](es/15-whatsapp-evaluacion.md)) |
+
+Catálogo de escenarios y pruebas: [`docs/FAILURE-CATALOG.md`](FAILURE-CATALOG.md). Suite completa ~90 s.
+
 Se mantiene a propósito: un `ROOT_MODE` desconocido (p. ej. `magisk`) sigue funcionando como `su`
 y un `BOOT_MODE` desconocido significa «instálalo a mano»; `ROOT_MODE` y `ARCH` solo **avisan**.
 
@@ -70,6 +80,7 @@ scripts que corren en el móvil solo se comprueban con `sh -n`, no se ejecutan.
 7. `printf 'TOKEN\n' | tools/noroot-bot.sh token` guarda el token.
 8. `NET_HOSTS` en Termux.
 9. `tools/noroot-doctor.sh` en un móvil sano y tras forzar la detención de Termux:Boot; las pruebas prolongadas de `docs/es/14-sin-root-fiabilidad.md`.
+10. Rearranque de Shizuku con `SHIZUKU_AUTH`, Shizuku tras reiniciar en una red nueva, avisos con el router apagado y el mensaje de bot muerto (procedimientos en `docs/es/14-sin-root-fiabilidad.md`).
 
 No hay compatibilidad nueva verificada con ningún dispositivo ni versión de Android.
 
